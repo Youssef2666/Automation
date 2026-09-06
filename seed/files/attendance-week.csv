@@ -1,0 +1,126 @@
+employee_no,full_name,department,work_date,check_in,check_out,status
+EMP-001,Ahmed Saleh,Finance,2026-08-24,08:50,17:56,present
+EMP-002,Fatima Tarhuni,Engineering,2026-08-24,08:40,17:25,present
+EMP-003,Omar Tarhuni,Human Resources,2026-08-24,08:30,16:31,present
+EMP-004,Layla Farhat,Sales,2026-08-24,08:50,18:03,present
+EMP-005,Khalid Zidan,Human Resources,2026-08-24,08:41,16:44,present
+EMP-006,Mariam Sharif,Support,2026-08-24,08:55,17:01,present
+EMP-007,Yusuf Mansour,Sales,2026-08-24,08:54,18:09,present
+EMP-008,Salma Rahal,Human Resources,2026-08-24,08:48,17:17,present
+EMP-009,Ali Haddad,Finance,2026-08-24,08:41,16:40,present
+EMP-010,Huda Barakat,Operations,2026-08-24,08:34,16:44,present
+EMP-011,Tariq Gharyani,Human Resources,2026-08-24,08:41,17:44,present
+EMP-012,Nour Nasr,Support,2026-08-24,08:36,17:25,present
+EMP-013,Hamza Sharif,Finance,2026-08-24,,,absent
+EMP-014,Rana Zidan,Finance,2026-08-24,08:55,17:35,present
+EMP-015,Bilal Gharyani,Human Resources,2026-08-24,09:04,17:17,late
+EMP-016,Aisha Amari,Support,2026-08-24,08:55,18:01,present
+EMP-017,Idris Zidan,Sales,2026-08-24,09:57,19:06,late
+EMP-018,Dalia Barakat,Operations,2026-08-24,08:41,17:26,present
+EMP-019,Samir Zidan,Operations,2026-08-24,08:41,17:55,present
+EMP-020,Lina Rahal,Support,2026-08-24,09:56,18:43,late
+EMP-021,Karim Farhat,Support,2026-08-24,08:34,17:01,present
+EMP-022,Amal Haddad,Human Resources,2026-08-24,08:32,17:11,present
+EMP-023,Ziad Gharyani,Engineering,2026-08-24,08:50,16:32,present
+EMP-024,Hana Farhat,Sales,2026-08-24,08:36,16:19,present
+EMP-025,Faris Tarhuni,Operations,2026-08-24,08:35,16:44,present
+EMP-001,Ahmed Saleh,Finance,2026-08-25,09:33,17:50,late
+EMP-002,Fatima Tarhuni,Engineering,2026-08-25,08:42,16:38,present
+EMP-003,Omar Tarhuni,Human Resources,2026-08-25,08:37,17:37,present
+EMP-004,Layla Farhat,Sales,2026-08-25,08:44,16:39,present
+EMP-005,Khalid Zidan,Human Resources,2026-08-25,08:48,16:48,present
+EMP-006,Mariam Sharif,Support,2026-08-25,08:43,16:46,present
+EMP-007,Yusuf Mansour,Sales,2026-08-25,08:42,17:49,present
+EMP-008,Salma Rahal,Human Resources,2026-08-25,,,absent
+EMP-009,Ali Haddad,Finance,2026-08-25,,,leave
+EMP-010,Huda Barakat,Operations,2026-08-25,08:51,17:50,present
+EMP-011,Tariq Gharyani,Human Resources,2026-08-25,08:34,17:30,present
+EMP-012,Nour Nasr,Support,2026-08-25,09:36,18:43,late
+EMP-013,Hamza Sharif,Finance,2026-08-25,08:55,17:07,present
+EMP-014,Rana Zidan,Finance,2026-08-25,08:39,17:35,present
+EMP-015,Bilal Gharyani,Human Resources,2026-08-25,08:34,16:17,present
+EMP-016,Aisha Amari,Support,2026-08-25,09:07,18:10,late
+EMP-017,Idris Zidan,Sales,2026-08-25,09:04,17:42,late
+EMP-018,Dalia Barakat,Operations,2026-08-25,08:55,18:04,present
+EMP-019,Samir Zidan,Operations,2026-08-25,08:47,17:16,present
+EMP-020,Lina Rahal,Support,2026-08-25,08:36,16:43,present
+EMP-021,Karim Farhat,Support,2026-08-25,08:37,16:58,present
+EMP-022,Amal Haddad,Human Resources,2026-08-25,09:41,18:03,late
+EMP-023,Ziad Gharyani,Engineering,2026-08-25,08:43,16:34,present
+EMP-024,Hana Farhat,Sales,2026-08-25,08:32,16:48,present
+EMP-025,Faris Tarhuni,Operations,2026-08-25,09:21,18:15,late
+EMP-001,Ahmed Saleh,Finance,2026-08-26,09:40,18:46,late
+EMP-002,Fatima Tarhuni,Engineering,2026-08-26,08:44,16:31,present
+EMP-003,Omar Tarhuni,Human Resources,2026-08-26,08:49,17:05,present
+EMP-004,Layla Farhat,Sales,2026-08-26,08:53,16:34,present
+EMP-005,Khalid Zidan,Human Resources,2026-08-26,,,leave
+EMP-006,Mariam Sharif,Support,2026-08-26,08:36,17:13,present
+EMP-007,Yusuf Mansour,Sales,2026-08-26,08:48,17:13,present
+EMP-008,Salma Rahal,Human Resources,2026-08-26,08:37,17:26,present
+EMP-009,Ali Haddad,Finance,2026-08-26,08:53,17:49,present
+EMP-010,Huda Barakat,Operations,2026-08-26,08:38,16:57,present
+EMP-011,Tariq Gharyani,Human Resources,2026-08-26,08:36,17:39,present
+EMP-012,Nour Nasr,Support,2026-08-26,08:34,17:37,present
+EMP-013,Hamza Sharif,Finance,2026-08-26,,,leave
+EMP-014,Rana Zidan,Finance,2026-08-26,08:50,18:03,present
+EMP-015,Bilal Gharyani,Human Resources,2026-08-26,08:41,17:06,present
+EMP-016,Aisha Amari,Support,2026-08-26,08:47,17:54,present
+EMP-017,Idris Zidan,Sales,2026-08-26,08:39,16:41,present
+EMP-018,Dalia Barakat,Operations,2026-08-26,08:36,17:04,present
+EMP-019,Samir Zidan,Operations,2026-08-26,08:44,17:37,present
+EMP-020,Lina Rahal,Support,2026-08-26,08:34,17:40,present
+EMP-021,Karim Farhat,Support,2026-08-26,09:43,18:25,late
+EMP-022,Amal Haddad,Human Resources,2026-08-26,08:48,16:50,present
+EMP-023,Ziad Gharyani,Engineering,2026-08-26,08:46,17:03,present
+EMP-024,Hana Farhat,Sales,2026-08-26,08:31,16:27,present
+EMP-025,Faris Tarhuni,Operations,2026-08-26,08:39,17:04,present
+EMP-001,Ahmed Saleh,Finance,2026-08-27,09:10,18:06,late
+EMP-002,Fatima Tarhuni,Engineering,2026-08-27,08:44,16:39,present
+EMP-003,Omar Tarhuni,Human Resources,2026-08-27,08:32,16:14,present
+EMP-004,Layla Farhat,Sales,2026-08-27,08:41,16:25,present
+EMP-005,Khalid Zidan,Human Resources,2026-08-27,,,leave
+EMP-006,Mariam Sharif,Support,2026-08-27,10:02,19:14,late
+EMP-007,Yusuf Mansour,Sales,2026-08-27,,,leave
+EMP-008,Salma Rahal,Human Resources,2026-08-27,08:47,16:51,present
+EMP-009,Ali Haddad,Finance,2026-08-27,08:42,16:51,present
+EMP-010,Huda Barakat,Operations,2026-08-27,08:34,17:04,present
+EMP-011,Tariq Gharyani,Human Resources,2026-08-27,08:41,16:28,present
+EMP-012,Nour Nasr,Support,2026-08-27,08:41,17:28,present
+EMP-013,Hamza Sharif,Finance,2026-08-27,08:41,17:46,present
+EMP-014,Rana Zidan,Finance,2026-08-27,,,leave
+EMP-015,Bilal Gharyani,Human Resources,2026-08-27,08:47,17:12,present
+EMP-016,Aisha Amari,Support,2026-08-27,08:42,17:17,present
+EMP-017,Idris Zidan,Sales,2026-08-27,09:35,17:20,late
+EMP-018,Dalia Barakat,Operations,2026-08-27,08:52,17:14,present
+EMP-019,Samir Zidan,Operations,2026-08-27,08:43,16:52,present
+EMP-020,Lina Rahal,Support,2026-08-27,08:52,17:10,present
+EMP-021,Karim Farhat,Support,2026-08-27,08:39,16:30,present
+EMP-022,Amal Haddad,Human Resources,2026-08-27,09:05,17:01,late
+EMP-023,Ziad Gharyani,Engineering,2026-08-27,,,leave
+EMP-024,Hana Farhat,Sales,2026-08-27,,,leave
+EMP-025,Faris Tarhuni,Operations,2026-08-27,08:42,16:26,present
+EMP-001,Ahmed Saleh,Finance,2026-08-28,,,absent
+EMP-002,Fatima Tarhuni,Engineering,2026-08-28,08:37,17:50,present
+EMP-003,Omar Tarhuni,Human Resources,2026-08-28,,,absent
+EMP-004,Layla Farhat,Sales,2026-08-28,08:55,18:04,present
+EMP-005,Khalid Zidan,Human Resources,2026-08-28,,,leave
+EMP-006,Mariam Sharif,Support,2026-08-28,08:44,17:56,present
+EMP-007,Yusuf Mansour,Sales,2026-08-28,08:32,16:22,present
+EMP-008,Salma Rahal,Human Resources,2026-08-28,08:31,16:50,present
+EMP-009,Ali Haddad,Finance,2026-08-28,08:31,17:10,present
+EMP-010,Huda Barakat,Operations,2026-08-28,08:39,16:43,present
+EMP-011,Tariq Gharyani,Human Resources,2026-08-28,08:31,16:52,present
+EMP-012,Nour Nasr,Support,2026-08-28,08:52,17:13,present
+EMP-013,Hamza Sharif,Finance,2026-08-28,08:36,17:15,present
+EMP-014,Rana Zidan,Finance,2026-08-28,08:33,16:44,present
+EMP-015,Bilal Gharyani,Human Resources,2026-08-28,08:51,17:00,present
+EMP-016,Aisha Amari,Support,2026-08-28,08:31,17:04,present
+EMP-017,Idris Zidan,Sales,2026-08-28,08:54,17:22,present
+EMP-018,Dalia Barakat,Operations,2026-08-28,,,absent
+EMP-019,Samir Zidan,Operations,2026-08-28,,,absent
+EMP-020,Lina Rahal,Support,2026-08-28,,,absent
+EMP-021,Karim Farhat,Support,2026-08-28,09:21,18:11,late
+EMP-022,Amal Haddad,Human Resources,2026-08-28,09:24,17:18,late
+EMP-023,Ziad Gharyani,Engineering,2026-08-28,08:39,17:26,present
+EMP-024,Hana Farhat,Sales,2026-08-28,08:41,17:37,present
+EMP-025,Faris Tarhuni,Operations,2026-08-28,08:42,17:11,present

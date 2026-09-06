@@ -8,6 +8,7 @@
 # --publish activates the imported workflows (otherwise only README `autopublish: true` ones are, when
 # run through scripts/setup.sh). Requires: stack up, `bash scripts/setup.sh` run once (API key).
 set -euo pipefail
+export MSYS_NO_PATHCONV=1  # Git Bash: keep /container/paths intact
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 PUBLISH=0

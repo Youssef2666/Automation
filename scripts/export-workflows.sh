@@ -7,6 +7,7 @@
 # Uses `n8n export:workflow --backup` inside the container, then scripts/dev/strip-export.py removes
 # credential values, pinData, instance metadata and re-pretty-prints so diffs stay readable.
 set -euo pipefail
+export MSYS_NO_PATHCONV=1  # Git Bash: keep /container/paths intact
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 OUT=/home/node/.n8n-files/data/export/raw

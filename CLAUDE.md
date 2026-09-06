@@ -2,7 +2,7 @@
 
 Public showcase repo: a self-contained n8n 2.x stack (Docker Compose) plus a **coverage matrix** of workflows and
 production patterns that all run offline against synthetic data. Source of truth for scope: `docs/PRD.md`.
-Owner: Moad Nasser. License MIT (n8n itself is fair-code and is not redistributed here).
+Owner: Youssef Almerash. License MIT (n8n itself is fair-code and is not redistributed here).
 
 ## Hard rules (hooks enforce most of these; do not work around them)
 

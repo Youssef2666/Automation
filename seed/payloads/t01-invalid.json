@@ -1,0 +1,9 @@
+{
+  "order_number": 12345,
+  "customer": {
+    "email": "not-an-email"
+  },
+  "items": [],
+  "total": "twenty",
+  "ordered_at": "yesterday"
+}

@@ -1,7 +1,7 @@
 # PRD — Automation Lab
 
 **Repo:** `automation-lab` (public, GitHub)
-**Owner:** Moad Nasser
+**Owner:** Youssef Almerash
 **Status:** Draft v1
 **Last updated:** 2026-09-06
 

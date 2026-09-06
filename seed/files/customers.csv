@@ -1,0 +1,61 @@
+external_id,name,email,phone,company,country,city,segment
+CSV-0001,Karim Farhat,karim.farhat2@lab.local,+216 20 856 5022,Blue Harbor Logistics,Tunisia,Sfax,enterprise
+CSV-0002,Siham Mansour,siham.mansour2@lab.local,+212 6 459 4137,Oasis Textiles,Morocco,Rabat,smb
+CSV-0003,Elena Rossi,elena.rossi@lab.local,+212 6 349 4455,Stonebridge Builders,Morocco,Casablanca,smb
+CSV-0004,Malik Lund,malik.lund@lab.local,+49 151 668 8552,Nimbus Cloud Hosting,Germany,Hamburg,enterprise
+CSV-0005,Nour Tarhuni,nour.tarhuni@lab.local,+90 53 271 1944,Juniper Design Studio,Turkey,Istanbul,enterprise
+CSV-0006,Yara Amari,yara.amari@lab.local,+971 50 735 6408,Falcon Freight,UAE,Abu Dhabi,mid
+CSV-0007,Nour Saleh,nour.saleh@lab.local,+218 91 295 3562,Acme Trading,Libya,Benghazi,enterprise
+CSV-0008,Emre Zwai,emre.zwai@lab.local,+218 91 374 3464,Copper Kettle Cafe,Libya,Benghazi,mid
+CSV-0009,Nour Weber,nour.weber@lab.local,+971 50 342 2713,Falcon Freight,UAE,Abu Dhabi,smb
+CSV-0010,Adel Demir,adel.demir@lab.local,+218 91 518 5472,Sahara Solar,Libya,Misrata,mid
+CSV-0011,Elena Zidan,elena.zidan@lab.local,+44 7700 202 3013,Summit Accounting,UK,Manchester,smb
+CSV-0012,Aylin Sharif,aylin.sharif.lab.local,+90 53 356 5359,Lighthouse Media,Turkey,Istanbul,enterprise
+CSV-0013,Bashir Nasr,bashir.nasr@lab.local,+90 53 358 5441,Ironwood Furniture,Turkey,Istanbul,smb
+CSV-0014,Yara Moreau,yara.moreau@lab.local,+44 7700 501 2947,Quartz Labs,UK,Manchester,enterprise
+CSV-0015,Wael Saleh,wael.saleh@lab.local,+216 20 402 4535,Greenfield Agritech,Tunisia,Tunis,smb
+CSV-0016,Nour Ferjani,nour.ferjani@lab.local,+39 3 258 4473,Brightwave Marine,Italy,Rome,smb
+CSV-0017,Siham Farhat,siham.farhat@lab.local,+49 151 926 8233,Nimbus Cloud Hosting,Germany,Berlin,mid
+CSV-0018,Elena Vidal,elena.vidal@lab.local,+34 6 337 1793,Harbor Tech Services,Spain,Valencia,enterprise
+CSV-0019,Siham Zidan,siham.zidan@lab.local,+216 20 950 5205,Olive Grove Foods,Tunisia,Sfax,enterprise
+CSV-0020,Elena Rossi,elena.rossi2@lab.local,+39 3 853 4023,Velvet Bakery,Italy,Milan,mid
+CSV-0021,Jamila Okur,jamila.okur@lab.local,+39 3 900 7893,Velvet Bakery,Italy,Rome,mid
+CSV-0022,Emre Tarhuni,emre.tarhuni@lab.local,+216 20 442 2803,Blue Harbor Logistics,Tunisia,Tunis,smb
+CSV-0023,Hana Moreau,hana.moreau@lab.local,+212 6 790 8272,Oasis Textiles,Morocco,Rabat,smb
+CSV-0024,Nabil Rahal,nabil.rahal@lab.local,+216 20 125 3643,Olive Grove Foods,Tunisia,Sfax,mid
+CSV-0025,Nour Okur,nour.okur@lab.local,+20 10 444 5674,Palm Coast Travel,Egypt,Alexandria,mid
+CSV-0026,Karim Gharyani,karim.gharyani@lab.local,+20 10 912 8211,Marble Works Co,Egypt,Alexandria,enterprise
+CSV-0027,,sami.saleh@lab.local,+20 10 819 3700,Cedar Software,Egypt,Alexandria,enterprise
+CSV-0028,Layan Vidal,layan.vidal@lab.local,+971 50 924 1963,Falcon Freight,UAE,Dubai,smb
+CSV-0029,Hana Demir,hana.demir@lab.local,+49 151 198 6578,Nimbus Cloud Hosting,Germany,Berlin,smb
+CSV-0030,Jonas Zwai,jonas.zwai@lab.local,+212 6 170 9643,Stonebridge Builders,Morocco,Rabat,enterprise
+CSV-0031,Emre Demir,emre.demir@lab.local,+218 91 861 7048,Copper Kettle Cafe,Libya,Tripoli,enterprise
+CSV-0032,Jamila Berg,jamila.berg@lab.local,+44 7700 987 7147,Quartz Labs,UK,Manchester,mid
+CSV-0033,Amal Novak,amal.novak@lab.local,+39 3 135 7090,Velvet Bakery,Italy,Rome,enterprise
+CSV-0034,Yara Moreau,yara.moreau2@lab.local,+90 53 614 5593,Ironwood Furniture,Turkey,Istanbul,enterprise
+CSV-0035,Emre Zidan,emre.zidan@lab.local,+218 91 224 4957,Dune Electric,Libya,Benghazi,enterprise
+CSV-0036,Tomas Fischer,tomas.fischer@lab.local,+212 6 703 2157,Stonebridge Builders,Morocco,Casablanca,enterprise
+CSV-0037,Selin Okur,selin.okur@lab.local,+218 91 400 5579,Copper Kettle Cafe,Libya,Benghazi,mid
+CSV-0038,Aylin Amari,aylin.amari@lab.local,+218 91 878 5759,Dune Electric,Libya,Tripoli,smb
+CSV-0039,Aylin Zidan,aylin.zidan@lab.local,+44 7700 805 7490,Summit Accounting,UK,London,mid
+CSV-0040,Karim Fischer,karim.fischer2@lab.local,+44 7700 697 3740,Summit Accounting,UK,London,mid
+CSV-0041,Malik Zwai,malik.zwai@lab.local,+39 3 707 3061,Brightwave Marine,Italy,Milan,enterprise
+CSV-0042,Hana Novak,hana.novak@lab.local,+216 20 947 1364,Greenfield Agritech,Tunisia,Tunis,enterprise
+CSV-0043,Malik Mansour,malik.mansour@lab.local,+20 10 250 9843,Palm Coast Travel,Egypt,Cairo,smb
+CSV-0044,Farid Bishti,farid.bishti@lab.local,+20 10 102 1350,Palm Coast Travel,Egypt,Alexandria,mid
+CSV-0045,Petra Tarhuni,petra.tarhuni@lab.local,+49 151 515 2946,Nimbus Cloud Hosting,Germany,Hamburg,smb
+CSV-0046,Dalia Rossi,dalia.rossi@lab.local,+218 91 149 5250,Acme Trading,Libya,Benghazi,mid
+CSV-0047,Jamila Rossi,jamila.rossi2@lab.local,+20 10 693 5478,Cedar Software,Egypt,Cairo,mid
+CSV-0048,Jamila Nasr,jamila.nasr@lab.local,+49 151 371 9268,Anchor Insurance,Germany,Hamburg,smb
+CSV-0049,Bashir Saleh,bashir.saleh@lab.local,+212 6 302 7735,Stonebridge Builders,Morocco,Casablanca,enterprise
+CSV-0050,Idris Sharif,idris.sharif@lab.local,+20 10 672 3879,Meridian Health Clinics,Egypt,Alexandria,mid
+CSV-0008,Omar Demir,omar.demir@lab.local,+34 6 482 4482,Harbor Tech Services,Spain,Madrid,enterprise
+CSV-0052,Malik Fischer,malik.fischer@lab.local,+218 91 158 8227,Acme Trading,Libya,Misrata,mid
+CSV-0053,Siham Berg,siham.berg2@lab.local,+216 20 650 3406,Blue Harbor Logistics,Tunisia,Tunis,mid
+CSV-0054,Sofia Costa,sofia.costa@lab.local,+49 151 962 7073,Nimbus Cloud Hosting,Germany,Hamburg,mid
+CSV-0055,Bashir Vidal,bashir.vidal@lab.local,+971 50 654 5749,Skyline Realty,UAE,Abu Dhabi,mid
+CSV-0056,Tariq Sharif,tariq.sharif@lab.local,+218 91 416 8909,Crescent Pharmacy Group,Libya,Benghazi,mid
+CSV-0057,Idris Haddad,idris.haddad@lab.local,+218 91 434 4174,Red Sand Tours,Libya,Tripoli,mid
+CSV-0058,Marco Zidan,marco.zidan@lab.local,+218 91 350 8769,Red Sand Tours,Libya,Misrata,mid
+CSV-0059,Malik Rossi,malik.rossi@lab.local,+34 6 380 6899,Orbit Logistics,Spain,Madrid,smb
+CSV-0060,Hana Rossi,hana.rossi@lab.local,+90 53 643 4620,Lighthouse Media,Turkey,Istanbul,enterprise

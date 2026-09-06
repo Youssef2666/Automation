@@ -1,0 +1,38 @@
+{
+  "action": "opened",
+  "issue": {
+    "number": 42,
+    "title": "Webhook returns 500 when items array is empty",
+    "body": "Steps to reproduce: POST t01-invalid.json to /webhook/orders. Expected 400, got 500.",
+    "state": "open",
+    "labels": [
+      {
+        "name": "bug"
+      },
+      {
+        "name": "T01"
+      }
+    ],
+    "user": {
+      "login": "karim-rossi"
+    },
+    "html_url": "https://github.com/lab-org/demo-repo/issues/42",
+    "created_at": "2026-09-01T08:30:00Z"
+  },
+  "repository": {
+    "id": 100001,
+    "name": "demo-repo",
+    "full_name": "lab-org/demo-repo",
+    "private": false,
+    "html_url": "https://github.com/lab-org/demo-repo",
+    "default_branch": "main",
+    "owner": {
+      "login": "lab-org",
+      "type": "Organization"
+    }
+  },
+  "sender": {
+    "login": "karim-rossi",
+    "type": "User"
+  }
+}

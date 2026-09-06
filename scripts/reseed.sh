@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Drop and recreate ONLY the demo database from seed/schema.sql + seed/seed.sql (n8n's own db is untouched).
 set -euo pipefail
+export MSYS_NO_PATHCONV=1  # Git Bash: keep /container/paths intact
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 set -a; [ -f .env ] && . ./.env; set +a
 PGUSER=${POSTGRES_USER:-n8n}; N8NDB=${POSTGRES_DB:-n8n}; DEMO=${DEMO_DB:-demo}

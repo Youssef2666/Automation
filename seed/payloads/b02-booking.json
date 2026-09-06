@@ -1,0 +1,11 @@
+{
+  "booking_ref": "BK-2701",
+  "customer_external_id": "CUST-0013",
+  "customer_email": "hana.okur@lab.local",
+  "customer_name": "Hana Okur",
+  "service": "Product demo",
+  "starts_at": "2026-09-02T09:00:00Z",
+  "ends_at": "2026-09-02T10:00:00Z",
+  "timezone": "Africa/Tripoli",
+  "notes": "Prefers a call in Arabic. Two attendees."
+}

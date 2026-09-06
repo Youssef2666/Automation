@@ -1,0 +1,29 @@
+{
+  "external_id": "evt-order-20260901-0001",
+  "order_number": "ORD-2026-9101",
+  "source": "webshop",
+  "customer": {
+    "external_id": "CUST-0007",
+    "email": "omar.nasr@lab.local",
+    "name": "Omar Nasr"
+  },
+  "currency": "USD",
+  "items": [
+    {
+      "sku": "SKU-0003",
+      "name": "Compact Ergonomic Chair",
+      "qty": 2,
+      "unit_price": 169.0
+    },
+    {
+      "sku": "SKU-0018",
+      "name": "Deluxe Electric Kettle",
+      "qty": 1,
+      "unit_price": 95.9
+    }
+  ],
+  "total": 433.9,
+  "ordered_at": "2026-09-01T08:55:00Z",
+  "replay": true,
+  "_note": "Same external_id as t01-order.json: the second delivery must be acknowledged but not re-processed."
+}
