@@ -47,10 +47,14 @@ echo "importing ${#IDS[@]} workflow(s)..."
 docker compose exec -T n8n n8n import:workflow --separate --input="$STAGING"
 docker compose exec -T n8n sh -c "rm -rf $STAGING"
 
-if [ "$PUBLISH" -eq 1 ]; then
-  for id in "${IDS[@]}"; do
-    [ -n "$id" ] || continue
+# import:workflow always leaves a workflow inactive (even when it was active before), so re-publish what needs
+# to be live: everything with --publish, otherwise the folders whose README says `autopublish: true`.
+i=0
+for f in "${FOLDERS[@]}"; do
+  id="${IDS[$i]:-}"; i=$((i + 1))
+  [ -n "$id" ] || continue
+  if [ "$PUBLISH" -eq 1 ] || grep -qE '^autopublish:[[:space:]]*true' "$f/README.md" 2>/dev/null; then
     python scripts/dev/publish.py "$id" || docker compose exec -T n8n n8n publish:workflow --id="$id"
-  done
-fi
+  fi
+done
 echo "done"

@@ -15,7 +15,9 @@ Facts proven against the running stack on 2026-09-06. Add to this file whenever 
   `python scripts/dev/publish.py <workflow-id>` activates one workflow; `python scripts/dev/executions.py --last N`
   lists executions (`--workflow <id>` filters); `python scripts/dev/run-workflow.py <ID>` executes a manual-trigger
   workflow via the CLI.
-- Re-importing the same id overwrites the workflow in place (`import:workflow` upserts by id). Activation is kept.
+- Re-importing the same id overwrites the workflow in place (`import:workflow` upserts by id) **and deactivates it**.
+  Sub-workflows must be published too ("Workflow is not active and cannot be executed" otherwise).
+  `scripts/import-workflows.sh` re-publishes `--publish` targets and folders with `autopublish: true`.
 - The demo db is reachable with `docker compose exec -T postgres psql -U n8n -d demo -tAc "<sql>"`;
   `bash scripts/reseed.sh` **drops and recreates** the demo db (wipes execution_log/notifications rows) - do not run
   it while another agent is verifying.
