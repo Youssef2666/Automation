@@ -81,7 +81,7 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        14560,
+        260,
         0
       ]
     },
@@ -114,7 +114,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        14820,
+        520,
         0
       ],
       "onError": "continueErrorOutput"
@@ -128,7 +128,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        15080,
+        780,
         0
       ]
     },
@@ -162,7 +162,7 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        15340,
+        1040,
         0
       ]
     },
@@ -190,7 +190,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        15600,
+        1300,
         0
       ]
     },

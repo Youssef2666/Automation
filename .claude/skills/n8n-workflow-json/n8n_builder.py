@@ -252,6 +252,22 @@ class Workflow:
                         else:
                             sub_of[src] = (dst, kind)
         roots = [n.name for n in self.nodes if main_in[n.name] == 0 and n.name not in sub_of]
+        # Drop back edges (loops such as Backoff -> Attempt state) before computing longest-path depths.
+        back: set[tuple[str, str]] = set()
+        state: dict[str, int] = {}
+
+        def dfs(u: str) -> None:
+            state[u] = 1
+            for v in main_out[u]:
+                if state.get(v, 0) == 1:
+                    back.add((u, v))
+                elif state.get(v, 0) == 0:
+                    dfs(v)
+            state[u] = 2
+
+        for r in roots:
+            if state.get(r, 0) == 0:
+                dfs(r)
         depth: dict[str, int] = {}
         q = deque((r, 0) for r in roots)
         while q:
@@ -260,7 +276,7 @@ class Workflow:
                 continue
             depth[name] = d
             for nxt in main_out[name]:
-                if depth.get(nxt, -1) < d + 1 and d < 60:
+                if (name, nxt) not in back and depth.get(nxt, -1) < d + 1 and d < 60:
                     q.append((nxt, d + 1))
         cols: dict[int, list[str]] = defaultdict(list)
         for n in self.nodes:
