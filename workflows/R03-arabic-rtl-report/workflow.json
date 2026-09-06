@@ -1,0 +1,498 @@
+{
+  "name": "R03 - Data to Arabic RTL DOCX/PPTX Report",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "215ebf95-8e31-5862-996c-4e09b1603fd7",
+      "name": "Run once (manual / CLI)",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "dddb6bfc-8869-5d2f-ab28-a16595276991",
+              "name": "report_to",
+              "value": "hr@lab.local",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "27052b36-ac82-566e-85ad-04a0ef67e1a5",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        260,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select e.employee_no, e.full_name, e.full_name_ar, e.department, e.department_ar, e.title,\n       count(a.id) filter (where a.status = 'present')::int as present,\n       count(a.id) filter (where a.status = 'late')::int    as late,\n       count(a.id) filter (where a.status = 'absent')::int  as absent,\n       count(a.id) filter (where a.status = 'leave')::int   as on_leave,\n       count(a.id)::int as days,\n       min(a.work_date)::text as period_start, max(a.work_date)::text as period_end\nfrom employees e\nleft join attendance a on a.employee_id = e.id\ngroup by e.id\norder by e.department_ar, e.full_name_ar",
+        "options": {}
+      },
+      "id": "0e2a847c-7d94-5469-9bdd-e9d6686a1902",
+      "name": "Attendance per employee",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        520,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "ALcredPostgresDm",
+          "name": "Postgres - demo"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Rows per employee -> one docgen DocRequest. Arabic labels, Western (ASCII) numerals, RTL handled by docgen.\nconst rows = $input.all().map(i => i.json);\nconst cfg = $('Config').first().json;\nconst start = rows.map(r => r.period_start).filter(Boolean).sort()[0] || '';\nconst end = rows.map(r => r.period_end).filter(Boolean).sort().slice(-1)[0] || '';\nconst pct = (a, b) => b ? Math.round((a / b) * 100) : 0;\nconst sum = (k) => rows.reduce((a, r) => a + Number(r[k] || 0), 0);\nconst totals = { present: sum('present'), late: sum('late'), absent: sum('absent'), on_leave: sum('on_leave'), days: sum('days') };\n\n// per department\nconst byDept = {};\nfor (const r of rows) {\n  const d = byDept[r.department_ar] ||= { name: r.department_ar, en: r.department, employees: 0, present: 0, late: 0, absent: 0, on_leave: 0, days: 0 };\n  d.employees += 1; for (const k of ['present', 'late', 'absent', 'on_leave', 'days']) d[k] += Number(r[k] || 0);\n}\nconst depts = Object.values(byDept).sort((a, b) => pct(b.present, b.days) - pct(a.present, a.days));\nconst worst = [...rows].sort((a, b) => (b.absent + b.late) - (a.absent + a.late)).slice(0, 5);\n\nconst doc = {\n  title: 'تقرير الحضور والانصراف',\n  subtitle: `الفترة من ${start} إلى ${end} - ${rows.length} موظفاً`,\n  lang: 'ar', rtl: true,\n  footer: 'أُنشئ هذا التقرير تلقائياً بواسطة Automation Lab (R03) - بيانات تجريبية',\n  sections: [\n    { heading: 'الملخص التنفيذي',\n      paragraphs: [\n        `بلغت نسبة الحضور الإجمالية ${pct(totals.present, totals.days)}% خلال الفترة، مع ${totals.late} حالة تأخير و${totals.absent} حالة غياب و${totals.on_leave} يوم إجازة من أصل ${totals.days} يوم عمل مسجّل.`,\n        `أعلى الأقسام حضوراً: ${depts[0]?.name || '-'} (${pct(depts[0]?.present, depts[0]?.days)}%)، وأقلها: ${depts[depts.length - 1]?.name || '-'} (${pct(depts[depts.length - 1]?.present, depts[depts.length - 1]?.days)}%).`,\n      ] },\n    { heading: 'الحضور حسب القسم',\n      table: { columns: ['القسم', 'الموظفون', 'حضور', 'تأخير', 'غياب', 'إجازة', 'نسبة الحضور'],\n               rows: depts.map(d => [d.name, d.employees, d.present, d.late, d.absent, d.on_leave, `${pct(d.present, d.days)}%`]) } },\n    { heading: 'تفاصيل الموظفين',\n      table: { columns: ['الرقم الوظيفي', 'الاسم', 'القسم', 'حضور', 'تأخير', 'غياب', 'إجازة'],\n               rows: rows.map(r => [r.employee_no, r.full_name_ar, r.department_ar, r.present, r.late, r.absent, r.on_leave]) } },\n    { heading: 'ملاحظات وتوصيات',\n      bullets: [\n        ...worst.map(r => `${r.full_name_ar} (${r.department_ar}): ${r.absent} غياب و${r.late} تأخير - يُنصح بالمتابعة`),\n        'الأرقام في هذا التقرير أرقام غربية (0-9) عمداً لتسهيل الفرز والمقارنة في الجداول.',\n      ] },\n  ],\n};\nconst stamp = end.replace(/-/g, '') || $now.toFormat('yyyyLLdd');\nreturn [{ json: { doc, base_name: `attendance-report-ar-${stamp}`, employees: rows.length, totals,\n                  period: { start, end }, report_to: cfg.report_to,\n                  subject: `تقرير الحضور والانصراف ${start} - ${end}` } }];"
+      },
+      "id": "9a972822-982a-51c4-81ef-ccabd638ac3a",
+      "name": "Build Arabic report (DocRequest)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        780,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://docgen:8090/render/docx",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file",
+              "outputPropertyName": "data"
+            }
+          },
+          "timeout": 120000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ ...$json.doc, filename: $json.base_name + '.docx' }) }}"
+      },
+      "id": "a0cbc0ab-653b-55c3-bf45-9dd208a1cd53",
+      "name": "Render DOCX (docgen)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1040,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://docgen:8090/render/pptx",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file",
+              "outputPropertyName": "data"
+            }
+          },
+          "timeout": 120000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ ...$json.doc, filename: $json.base_name + '.pptx' }) }}"
+      },
+      "id": "e358dbdb-f778-5c5d-913a-4cf5681d3f0f",
+      "name": "Render PPTX (docgen)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1040,
+        220
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "=/home/node/.n8n-files/data/out/{{ $('Build Arabic report (DocRequest)').item.json.base_name }}.docx",
+        "dataPropertyName": "data",
+        "options": {}
+      },
+      "id": "e2cc26b1-a73f-51c0-bbe7-d17e1c0d20f9",
+      "name": "Write DOCX",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        1300,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "=/home/node/.n8n-files/data/out/{{ $('Build Arabic report (DocRequest)').item.json.base_name }}.pptx",
+        "dataPropertyName": "data",
+        "options": {}
+      },
+      "id": "09427714-d46e-5fcf-b0cd-e8f678ad62d9",
+      "name": "Write PPTX",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        1300,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "operation": "upload",
+        "bucketName": "reports",
+        "fileName": "=attendance/{{ $('Build Arabic report (DocRequest)').item.json.base_name }}.docx",
+        "binaryData": true,
+        "binaryPropertyName": "data",
+        "additionalFields": {},
+        "tagsUi": {}
+      },
+      "id": "e65e7fb5-8503-5051-8e92-9b7cb14bb7ce",
+      "name": "Upload DOCX (MinIO)",
+      "type": "n8n-nodes-base.s3",
+      "typeVersion": 1,
+      "position": [
+        1560,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "s3": {
+          "id": "ALcredS3MinioLoc",
+          "name": "S3 - MinIO"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "operation": "upload",
+        "bucketName": "reports",
+        "fileName": "=attendance/{{ $('Build Arabic report (DocRequest)').item.json.base_name }}.pptx",
+        "binaryData": true,
+        "binaryPropertyName": "data",
+        "additionalFields": {},
+        "tagsUi": {}
+      },
+      "id": "8578fdb0-9eae-5088-9ad4-13666993c7c5",
+      "name": "Upload PPTX (MinIO)",
+      "type": "n8n-nodes-base.s3",
+      "typeVersion": 1,
+      "position": [
+        1560,
+        220
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "s3": {
+          "id": "ALcredS3MinioLoc",
+          "name": "S3 - MinIO"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "schema": {
+          "__rl": true,
+          "value": "public",
+          "mode": "list"
+        },
+        "table": {
+          "__rl": true,
+          "value": "documents",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "kind": "report-docx-ar",
+            "file_name": "={{ $('Build Arabic report (DocRequest)').item.json.base_name }}.docx",
+            "storage_key": "=s3://reports/attendance/{{ $('Build Arabic report (DocRequest)').item.json.base_name }}.docx",
+            "meta": "={{ JSON.stringify({ lang: 'ar', rtl: true, employees: $('Build Arabic report (DocRequest)').item.json.employees, period: $('Build Arabic report (DocRequest)').item.json.period, totals: $('Build Arabic report (DocRequest)').item.json.totals }) }}"
+          },
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "3a6c8515-6047-5fb3-ae63-01b7b838c37d",
+      "name": "Record DOCX",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1820,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "ALcredPostgresDm",
+          "name": "Postgres - demo"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "schema": {
+          "__rl": true,
+          "value": "public",
+          "mode": "list"
+        },
+        "table": {
+          "__rl": true,
+          "value": "documents",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "kind": "report-pptx-ar",
+            "file_name": "={{ $('Build Arabic report (DocRequest)').item.json.base_name }}.pptx",
+            "storage_key": "=s3://reports/attendance/{{ $('Build Arabic report (DocRequest)').item.json.base_name }}.pptx",
+            "meta": "={{ JSON.stringify({ lang: 'ar', rtl: true, employees: $('Build Arabic report (DocRequest)').item.json.employees, period: $('Build Arabic report (DocRequest)').item.json.period }) }}"
+          },
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "73db61e2-c758-55c5-a4dc-14c27b4a06d8",
+      "name": "Record PPTX",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1820,
+        220
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "ALcredPostgresDm",
+          "name": "Postgres - demo"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fromEmail": "automation-lab@lab.local",
+        "toEmail": "={{ $('Build Arabic report (DocRequest)').item.json.report_to }}",
+        "subject": "={{ $('Build Arabic report (DocRequest)').item.json.subject }}",
+        "options": {
+          "attachments": "data"
+        },
+        "emailFormat": "html",
+        "html": "=<div dir=\"rtl\" style=\"font-family:sans-serif\"><p>مرفق تقرير الحضور والانصراف للفترة {{ $('Build Arabic report (DocRequest)').item.json.period.start }} - {{ $('Build Arabic report (DocRequest)').item.json.period.end }} ({{ $('Build Arabic report (DocRequest)').item.json.employees }} موظفاً).</p><p>نسخة العرض التقديمي (PPTX) محفوظة في MinIO تحت reports/attendance/.</p></div>"
+      },
+      "id": "a858e618-03b0-5f45-a5cd-789caa1b0c04",
+      "name": "Email HR (Mailpit)",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        1560,
+        440
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "smtp": {
+          "id": "ALcredSmtpMailpt",
+          "name": "SMTP - Mailpit"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "## R03 - Arabic RTL report (flagship)\nOne query -> a Code node assembles a structured `DocRequest` (Arabic title, sections, tables, bullets) -> **docgen** renders DOCX (python-docx, `w:bidi`/`w:rtl`, Amiri font) and PPTX (python-pptx, `rtl=\"1\"`).\n\nShaping and bidi are handled by the document renderers (Word/PowerPoint/LibreOffice), so the text stays real, searchable Arabic - not pre-shaped glyphs. Numerals are Western on purpose.\n\nOutputs: `data/out/attendance-report-ar-<date>.docx|pptx`, MinIO `reports/attendance/`, `documents` rows, HR e-mail.",
+        "height": 260,
+        "width": 680,
+        "color": 4
+      },
+      "id": "6a556962-72ba-55a5-b9b2-f92d3a8312b7",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -40,
+        -360
+      ]
+    }
+  ],
+  "connections": {
+    "Run once (manual / CLI)": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "Attendance per employee",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Attendance per employee": {
+      "main": [
+        [
+          {
+            "node": "Build Arabic report (DocRequest)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Arabic report (DocRequest)": {
+      "main": [
+        [
+          {
+            "node": "Render DOCX (docgen)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Render PPTX (docgen)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Render DOCX (docgen)": {
+      "main": [
+        [
+          {
+            "node": "Write DOCX",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Render PPTX (docgen)": {
+      "main": [
+        [
+          {
+            "node": "Write PPTX",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write DOCX": {
+      "main": [
+        [
+          {
+            "node": "Upload DOCX (MinIO)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Email HR (Mailpit)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload DOCX (MinIO)": {
+      "main": [
+        [
+          {
+            "node": "Record DOCX",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write PPTX": {
+      "main": [
+        [
+          {
+            "node": "Upload PPTX (MinIO)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload PPTX (MinIO)": {
+      "main": [
+        [
+          {
+            "node": "Record PPTX",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Africa/Tripoli",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "ALP01ErrorHandle"
+  },
+  "pinData": {},
+  "versionId": "42a9f780-b147-573b-8472-ce8b0fbe1434",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "description": "Bilingual-ready Arabic RTL attendance report as DOCX and PPTX via docgen."
+  },
+  "id": "ALR03ArabicRtlRe",
+  "tags": [
+    {
+      "name": "automation-lab"
+    },
+    {
+      "name": "Documents"
+    }
+  ]
+}

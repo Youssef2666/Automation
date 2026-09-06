@@ -961,6 +961,22 @@ def render_customers_csv(ds: dict[str, Any]) -> str:
     return buf.getvalue()
 
 
+def render_certificates_csv(ds: dict[str, Any]) -> str:
+    """12 course completions drawn from the employees (for R02 bulk certificates)."""
+    rng = random.Random(20260102)
+    courses = [("n8n Fundamentals", 8), ("Postgres for Automation", 6), ("Document Automation with Docgen", 4),
+               ("Arabic OCR Calibration", 5), ("Incident Response Basics", 3)]
+    instructors = ["Dr. Salma Idris", "Eng. Karim Haddad", "Ms. Nour Elgadi"]
+    buf = io.StringIO()
+    w = csv.writer(buf, lineterminator="\n")
+    w.writerow(["full_name", "email", "course", "hours", "completed_on", "instructor"])
+    for e in ds["employees"][:12]:
+        course, hours = rng.choice(courses)
+        day = NOW.date() - timedelta(days=rng.randint(3, 40))
+        w.writerow([e["full_name"], e["email"], course, hours, day.isoformat(), rng.choice(instructors)])
+    return buf.getvalue()
+
+
 def render_attendance_csv(ds: dict[str, Any]) -> str:
     buf = io.StringIO()
     w = csv.writer(buf, lineterminator="\n")
@@ -1528,6 +1544,7 @@ def text_outputs(ds: dict[str, Any]) -> dict[str, str]:
         "seed/schema.sql": render_schema(),
         "seed/seed.sql": render_seed(ds),
         "seed/files/customers.csv": render_customers_csv(ds),
+        "seed/files/certificates.csv": render_certificates_csv(ds),
         "seed/files/attendance-week.csv": render_attendance_csv(ds),
         "seed/files/article.md": ARTICLE_MD,
         "docker/mock-api/db.json": dump_json(build_mock_db(ds)),

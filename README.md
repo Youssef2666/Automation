@@ -69,7 +69,7 @@ current screenshot and passes `scripts/validate.py` (see [CONTRIBUTING.md](CONTR
 
 Generated from each folder's README front-matter. Do not edit between the markers.
 
-<!-- STATS:START -->**4 of 36 workflows shipped · 4 of 8 patterns**<!-- STATS:END -->
+<!-- STATS:START -->**8 of 36 workflows shipped · 4 of 8 patterns**<!-- STATS:END -->
 
 <!-- MATRIX:START -->
 ### Triggers (3/7 shipped)
@@ -104,14 +104,14 @@ Generated from each folder's README front-matter. Do not edit between the marker
 | M04 | DB Threshold Alert | Beginner | - | - | 📋 planned |
 | M05 | Price / Exchange-rate Watcher | Intermediate | - | - | 📋 planned |
 
-### Documents (0/4 shipped)
+### Documents (4/4 shipped)
 
 | ID | Workflow | Difficulty | Patterns | Services | Status |
 |---|---|---|---|---|---|
-| R01 | Data to PDF Invoice | Intermediate | - | - | 📋 planned |
-| R02 | Bulk Certificate Generation from CSV | Intermediate | - | - | 📋 planned |
-| R03 | Data to Arabic RTL DOCX/PPTX Report | Advanced | - | - | 📋 planned |
-| R04 | PDF to Structured Fields to Dataset | Advanced | - | - | 📋 planned |
+| R01 | [Data to PDF Invoice](workflows/R01-pdf-invoice/) | Intermediate | [P01](patterns/P01-error-handler/) | core, docs | ✅ shipped |
+| R02 | [Bulk Certificate Generation from CSV](workflows/R02-bulk-certificates/) | Intermediate | [P01](patterns/P01-error-handler/) | core, docs | ✅ shipped |
+| R03 | [Data to Arabic RTL DOCX/PPTX Report](workflows/R03-arabic-rtl-report/) | Advanced | [P01](patterns/P01-error-handler/) | core, docs | ✅ shipped |
+| R04 | [PDF to Structured Fields to Dataset](workflows/R04-pdf-to-dataset/) | Advanced | [P01](patterns/P01-error-handler/) | core, docs | ✅ shipped |
 
 ### AI (0/6 shipped)
 
@@ -151,7 +151,7 @@ Each pattern documents a failure story, the rule, its n8n implementation, the tr
 <!-- PATTERNS:START -->
 | ID | Pattern | Used by | Status |
 |---|---|---|---|
-| P01 | [Global Error Handler](patterns/P01-error-handler/) | [D01](workflows/D01-csv-import-validation/), [T01](workflows/T01-webhook-to-database/), [T02](workflows/T02-daily-digest/), [T03](workflows/T03-api-polling/) | ✅ shipped |
+| P01 | [Global Error Handler](patterns/P01-error-handler/) | [D01](workflows/D01-csv-import-validation/), [R01](workflows/R01-pdf-invoice/), [R02](workflows/R02-bulk-certificates/), [R03](workflows/R03-arabic-rtl-report/), [R04](workflows/R04-pdf-to-dataset/), [T01](workflows/T01-webhook-to-database/), [T02](workflows/T02-daily-digest/), [T03](workflows/T03-api-polling/) | ✅ shipped |
 | P02 | [Retry with Exponential Backoff](patterns/P02-retry-backoff/) | [T03](workflows/T03-api-polling/) | ✅ shipped |
 | P03 | [Idempotency](patterns/P03-idempotency/) | [T01](workflows/T01-webhook-to-database/) | ✅ shipped |
 | P04 | Rate Limiting and Batching | - | 📋 planned |

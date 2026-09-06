@@ -1,0 +1,411 @@
+{
+  "name": "R01 - Data to PDF Invoice",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "21ac082b-0fae-5fd9-87ef-dcd1a91089c3",
+      "name": "Run once (manual / CLI)",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "61926500-3721-59a0-846e-cd3cd4de8dc9",
+              "name": "order_number",
+              "value": "ORD-2026-0001",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "36e68fa7-0d8f-5b02-b274-507df513788f",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        260,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select o.order_number, o.status, o.total::float as total, o.currency, o.ordered_at, o.shipped_at,\n       c.external_id as customer_external_id, c.name as customer_name, c.email as customer_email,\n       c.company, c.city, c.country,\n       coalesce((select json_agg(json_build_object('sku', p.sku, 'name', p.name, 'qty', i.qty,\n                                                    'unit_price', i.unit_price::float,\n                                                    'amount', (i.qty * i.unit_price)::float) order by i.id)\n                 from order_items i join products p on p.id = i.product_id where i.order_id = o.id), '[]'::json) as items\nfrom orders o\njoin customers c on c.id = o.customer_id\nwhere o.order_number = $1",
+        "options": {
+          "queryReplacement": "={{ $json.order_number }}"
+        }
+      },
+      "id": "5e11cee2-a4e3-5b9c-8fea-c2eeb1faafea",
+      "name": "Load order + items",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        520,
+        0
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "ALcredPostgresDm",
+          "name": "Postgres - demo"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "451769c4-300f-5350-8308-97ede7d8a7d3",
+              "leftValue": "={{ $json.order_number ?? '' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "e09912bf-8d74-52d1-8f24-11c23ca4ed3a",
+      "name": "Order found?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        780,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "errorMessage": "=R01: no order with number {{ $('Config').item.json.order_number }}"
+      },
+      "id": "b5cea842-1af5-543e-9fd1-b2a6367c8117",
+      "name": "Order not found",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        1040,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// One order item in (with items[] from json_agg). Render a self-contained HTML invoice for docgen.\nconst o = $input.first().json;\nconst items = Array.isArray(o.items) ? o.items : JSON.parse(o.items || '[]');\nconst money = (n) => Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });\nconst subtotal = items.reduce((a, i) => a + Number(i.amount || 0), 0);\nconst vatRate = 0.0;                                   // demo: no tax; change per jurisdiction\nconst vat = subtotal * vatRate;\nconst total = subtotal + vat;\nconst issued = (o.ordered_at || '').slice(0, 10);\nconst due = new Date(new Date(o.ordered_at).getTime() + 30 * 86400000).toISOString().slice(0, 10);\nconst invoiceNo = 'INV-' + o.order_number.replace('ORD-', '');\nconst rows = items.map(i => `<tr><td>${i.sku}</td><td>${i.name}</td><td class=\"n\">${i.qty}</td><td class=\"n\">${money(i.unit_price)}</td><td class=\"n\">${money(i.amount)}</td></tr>`).join('');\nconst html = `<!doctype html><html><head><meta charset=\"utf-8\"><style>\nbody{font-family:'DejaVu Sans',sans-serif;font-size:11pt;color:#222;margin:32px}\nh1{font-size:26pt;margin:0;color:#1a4d8f} .muted{color:#777} .grid{display:flex;justify-content:space-between;margin:24px 0}\ntable{width:100%;border-collapse:collapse;margin-top:12px} th{background:#1a4d8f;color:#fff;text-align:left;padding:6px}\ntd{padding:6px;border-bottom:1px solid #ddd} td.n,th.n{text-align:right} .totals td{border:0;font-weight:bold}\n.badge{display:inline-block;padding:2px 8px;border-radius:4px;background:#e8f0fb;color:#1a4d8f;font-size:9pt}\nfooter{margin-top:40px;font-size:9pt;color:#777}\n</style></head><body>\n<div class=\"grid\"><div><h1>INVOICE</h1><div class=\"muted\">${invoiceNo} <span class=\"badge\">${o.status}</span></div></div>\n<div class=\"muted\" style=\"text-align:right\">Automation Lab Demo Co.<br>1 Example Street, Tripoli<br>billing@lab.local</div></div>\n<div class=\"grid\"><div><b>Bill to</b><br>${o.customer_name}<br>${o.company || ''}<br>${o.city || ''}, ${o.country || ''}<br>${o.customer_email}</div>\n<div style=\"text-align:right\"><b>Issue date</b> ${issued}<br><b>Due date</b> ${due}<br><b>Order</b> ${o.order_number}<br><b>Currency</b> ${o.currency}</div></div>\n<table><thead><tr><th>SKU</th><th>Description</th><th class=\"n\">Qty</th><th class=\"n\">Unit price</th><th class=\"n\">Amount</th></tr></thead>\n<tbody>${rows}</tbody>\n<tfoot class=\"totals\"><tr><td colspan=\"4\" class=\"n\">Subtotal</td><td class=\"n\">${money(subtotal)}</td></tr>\n<tr><td colspan=\"4\" class=\"n\">VAT (${(vatRate * 100).toFixed(0)}%)</td><td class=\"n\">${money(vat)}</td></tr>\n<tr><td colspan=\"4\" class=\"n\">Total ${o.currency}</td><td class=\"n\">${money(total)}</td></tr></tfoot></table>\n<footer>Payment within 30 days. This is a synthetic demo document generated by Automation Lab (R01).</footer>\n</body></html>`;\nreturn [{ json: { invoice_no: invoiceNo, order_number: o.order_number, customer_email: o.customer_email,\n                  customer_name: o.customer_name, total, currency: o.currency, items: items.length,\n                  filename: `invoice-${o.order_number}.pdf`, html } }];"
+      },
+      "id": "0b3ec5fb-c7ec-5721-9bda-315cf2fb54cf",
+      "name": "Build invoice HTML",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1040,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://docgen:8090/render/pdf",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file",
+              "outputPropertyName": "data"
+            }
+          },
+          "timeout": 60000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ html: $json.html, filename: $json.filename }) }}"
+      },
+      "id": "782e1543-d496-545b-9e3e-cdc5b6dbac1e",
+      "name": "Render PDF (docgen)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1300,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "=/home/node/.n8n-files/data/out/{{ $('Build invoice HTML').item.json.filename }}",
+        "dataPropertyName": "data",
+        "options": {}
+      },
+      "id": "e76b9f0a-45a8-5b79-b285-8c2afad613da",
+      "name": "Write PDF to data/out",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        1560,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "operation": "upload",
+        "bucketName": "reports",
+        "fileName": "=invoices/{{ $('Build invoice HTML').item.json.filename }}",
+        "binaryData": true,
+        "binaryPropertyName": "data",
+        "additionalFields": {},
+        "tagsUi": {}
+      },
+      "id": "be83d559-1fe6-5cba-83ac-3f71d1b74159",
+      "name": "Upload to MinIO (reports)",
+      "type": "n8n-nodes-base.s3",
+      "typeVersion": 1,
+      "position": [
+        1820,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "s3": {
+          "id": "ALcredS3MinioLoc",
+          "name": "S3 - MinIO"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "schema": {
+          "__rl": true,
+          "value": "public",
+          "mode": "list"
+        },
+        "table": {
+          "__rl": true,
+          "value": "documents",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "kind": "invoice",
+            "file_name": "={{ $('Build invoice HTML').item.json.filename }}",
+            "storage_key": "=s3://reports/invoices/{{ $('Build invoice HTML').item.json.filename }}",
+            "meta": "={{ JSON.stringify({ invoice_no: $('Build invoice HTML').item.json.invoice_no, order_number: $('Build invoice HTML').item.json.order_number, total: $('Build invoice HTML').item.json.total, currency: $('Build invoice HTML').item.json.currency, items: $('Build invoice HTML').item.json.items }) }}"
+          },
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "c6281695-d22e-5e2f-8433-ac0276c6dc3f",
+      "name": "Record document",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2080,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "ALcredPostgresDm",
+          "name": "Postgres - demo"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fromEmail": "automation-lab@lab.local",
+        "toEmail": "={{ $('Build invoice HTML').item.json.customer_email }}",
+        "subject": "=Invoice {{ $('Build invoice HTML').item.json.invoice_no }} for order {{ $('Build invoice HTML').item.json.order_number }}",
+        "options": {
+          "attachments": "data"
+        },
+        "emailFormat": "html",
+        "html": "=<p>Dear {{ $('Build invoice HTML').item.json.customer_name }},</p><p>please find attached invoice <b>{{ $('Build invoice HTML').item.json.invoice_no }}</b> ({{ $('Build invoice HTML').item.json.currency }} {{ $('Build invoice HTML').item.json.total.toFixed(2) }}).</p><p>Automation Lab Demo Co.</p>"
+      },
+      "id": "459cce74-5ce1-51ac-a1d3-4289e6a2c0a7",
+      "name": "Email invoice (Mailpit)",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        1820,
+        220
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "smtp": {
+          "id": "ALcredSmtpMailpt",
+          "name": "SMTP - Mailpit"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "## R01 - Data -> PDF invoice\nOne SQL query returns the order, the customer and the line items (as JSON). A Code node renders an HTML template, **docgen** (`/render/pdf`, WeasyPrint) turns it into a PDF.\n\nOutputs: `data/out/invoice-<order>.pdf`, MinIO `reports/invoices/`, a `documents` row and an e-mail to the customer (Mailpit) with the PDF attached.",
+        "height": 210,
+        "width": 620,
+        "color": 4
+      },
+      "id": "a6feb143-16b2-58bf-8206-34cffa9733f6",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -40,
+        -330
+      ]
+    }
+  ],
+  "connections": {
+    "Run once (manual / CLI)": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "Load order + items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load order + items": {
+      "main": [
+        [
+          {
+            "node": "Order found?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Order found?": {
+      "main": [
+        [
+          {
+            "node": "Build invoice HTML",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Order not found",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build invoice HTML": {
+      "main": [
+        [
+          {
+            "node": "Render PDF (docgen)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Render PDF (docgen)": {
+      "main": [
+        [
+          {
+            "node": "Write PDF to data/out",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write PDF to data/out": {
+      "main": [
+        [
+          {
+            "node": "Upload to MinIO (reports)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Email invoice (Mailpit)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload to MinIO (reports)": {
+      "main": [
+        [
+          {
+            "node": "Record document",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Africa/Tripoli",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "ALP01ErrorHandle"
+  },
+  "pinData": {},
+  "versionId": "e7d68daa-a067-5758-b96c-d05067e9957e",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "description": "Turns an order into a PDF invoice via docgen, stores it in MinIO and e-mails it."
+  },
+  "id": "ALR01PdfInvoice0",
+  "tags": [
+    {
+      "name": "automation-lab"
+    },
+    {
+      "name": "Documents"
+    }
+  ]
+}

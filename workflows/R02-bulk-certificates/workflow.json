@@ -1,0 +1,457 @@
+{
+  "name": "R02 - Bulk Certificate Generation from CSV",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "daedf95b-1717-54bb-804e-89f2c5c46b6d",
+      "name": "Run once (manual / CLI)",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "9938f184-5ef0-5d06-9890-99d1c4cedcf0",
+              "name": "file",
+              "value": "/home/node/.n8n-files/seed/certificates.csv",
+              "type": "string"
+            },
+            {
+              "id": "906fbf4c-6c52-57fb-a1af-3b26f6f44064",
+              "name": "report_to",
+              "value": "training@lab.local",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "ee381625-b9c3-524b-929b-691a8831ed56",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        260,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "fileSelector": "={{ $json.file }}",
+        "options": {
+          "dataPropertyName": "data"
+        }
+      },
+      "id": "b666a01a-f072-5c18-9bbe-219eab757138",
+      "name": "Read CSV",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        520,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "csv",
+        "binaryPropertyName": "data",
+        "options": {
+          "headerRow": true
+        }
+      },
+      "id": "9a9d485a-251c-5fe9-bd3f-2a3619e071f3",
+      "name": "Extract rows",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        780,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Per row: {full_name, email, course, completed_on, hours, instructor} -> HTML certificate (A4 landscape).\nconst r = $json;\nconst slug = String(r.full_name || 'attendee').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');\nconst id = `CERT-${String(r.completed_on || '').replace(/-/g, '')}-${String($itemIndex + 1).padStart(3, '0')}`;\nconst html = `<!doctype html><html><head><meta charset=\"utf-8\"><style>\n@page { size: A4 landscape; margin: 0 }\nhtml,body{margin:0;width:297mm;height:210mm;font-family:'DejaVu Sans',sans-serif;color:#1d2b3a}\n/* explicit offsets: WeasyPrint 62 does not support the inset shorthand */\n.frame{position:absolute;top:14mm;left:14mm;right:14mm;bottom:14mm;border:6px double #b08d2c;padding:14mm 18mm;text-align:center}\nh1{font-size:34pt;letter-spacing:4px;margin:0 0 6mm;color:#b08d2c} .sub{font-size:13pt;color:#666}\n.name{font-size:30pt;margin:10mm 0 4mm;border-bottom:2px solid #1d2b3a;display:inline-block;padding:0 12mm 2mm}\n.course{font-size:18pt;margin:6mm 0} .meta{font-size:11pt;color:#555;margin-top:12mm}\n.sig{display:flex;justify-content:space-around;margin-top:16mm;font-size:11pt}\n.sig div{border-top:1px solid #1d2b3a;padding-top:2mm;width:60mm} .id{position:absolute;bottom:8mm;right:12mm;font-size:8pt;color:#999}\n</style></head><body><div class=\"frame\">\n<h1>CERTIFICATE</h1><div class=\"sub\">of completion</div>\n<div class=\"sub\" style=\"margin-top:8mm\">This certifies that</div>\n<div class=\"name\">${r.full_name}</div>\n<div class=\"sub\">has successfully completed</div>\n<div class=\"course\">${r.course}</div>\n<div class=\"meta\">${r.hours} hours · completed on ${r.completed_on}</div>\n<div class=\"sig\"><div>${r.instructor}<br><small>Instructor</small></div><div>Automation Lab Academy<br><small>Programme director</small></div></div>\n<div class=\"id\">${id} · synthetic demo document (R02)</div>\n</div></body></html>`;\nreturn { json: { ...r, certificate_id: id, filename: `${slug}-${String(r.course || '').toLowerCase().replace(/[^a-z0-9]+/g, '-')}.pdf`, html } };",
+        "mode": "runOnceForEachItem"
+      },
+      "id": "62fd9bd0-c139-51f4-bcb4-44ca0fb77a11",
+      "name": "Certificate HTML (per row)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1040,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://docgen:8090/render/pdf",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file",
+              "outputPropertyName": "data"
+            }
+          },
+          "timeout": 60000,
+          "batching": {
+            "batch": {
+              "batchSize": 2,
+              "batchInterval": 200
+            }
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ html: $json.html, filename: $json.filename }) }}"
+      },
+      "id": "311ce0a0-a1fb-52cd-864c-83ee3dad92a4",
+      "name": "Render PDF (docgen)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1300,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "=/home/node/.n8n-files/data/out/certificate-{{ $('Certificate HTML (per row)').item.json.filename }}",
+        "dataPropertyName": "data",
+        "options": {}
+      },
+      "id": "243ba739-1155-5c20-8a0d-bac347f261be",
+      "name": "Write each PDF",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        1560,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Collect every rendered PDF (binary \"data\" on each item) into ONE item with binary file0..fileN,\n// so the Compression node can zip them together.\nconst items = $input.all();\nconst binary = {};\nitems.forEach((it, i) => { if (it.binary && it.binary.data) binary[`file${i}`] = it.binary.data; });\nconst names = items.map(it => it.binary?.data?.fileName || `certificate-${it.json.certificate_id}.pdf`);\nreturn [{ json: { count: Object.keys(binary).length, files: names, keys: Object.keys(binary).join(','),\n                  zip_name: `certificates-${$now.toFormat('yyyyLLdd-HHmmss')}.zip` }, binary }];"
+      },
+      "id": "ed8ab58b-3ad6-5896-9c4d-5cea9e6a3898",
+      "name": "Bundle PDFs into one item",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1820,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "compress",
+        "binaryPropertyName": "={{ $json.keys }}",
+        "outputFormat": "zip",
+        "fileName": "={{ $json.zip_name }}"
+      },
+      "id": "48649675-d64b-5ee8-8cb3-c08bb33aa1d8",
+      "name": "Zip certificates",
+      "type": "n8n-nodes-base.compression",
+      "typeVersion": 1.1,
+      "position": [
+        2080,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "=/home/node/.n8n-files/data/out/{{ $('Bundle PDFs into one item').item.json.zip_name }}",
+        "dataPropertyName": "data",
+        "options": {}
+      },
+      "id": "335fb3cf-3c01-5a6a-8434-dfcf4f2971a8",
+      "name": "Write ZIP",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        2340,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "operation": "upload",
+        "bucketName": "reports",
+        "fileName": "=certificates/{{ $('Bundle PDFs into one item').item.json.zip_name }}",
+        "binaryData": true,
+        "binaryPropertyName": "data",
+        "additionalFields": {},
+        "tagsUi": {}
+      },
+      "id": "ce99f7a8-1d20-59bb-81e7-04fd4a986cc6",
+      "name": "Upload ZIP (MinIO)",
+      "type": "n8n-nodes-base.s3",
+      "typeVersion": 1,
+      "position": [
+        2600,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "s3": {
+          "id": "ALcredS3MinioLoc",
+          "name": "S3 - MinIO"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "schema": {
+          "__rl": true,
+          "value": "public",
+          "mode": "list"
+        },
+        "table": {
+          "__rl": true,
+          "value": "documents",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "kind": "certificates-zip",
+            "file_name": "={{ $('Bundle PDFs into one item').item.json.zip_name }}",
+            "storage_key": "=s3://reports/certificates/{{ $('Bundle PDFs into one item').item.json.zip_name }}",
+            "meta": "={{ JSON.stringify({ count: $('Bundle PDFs into one item').item.json.count, files: $('Bundle PDFs into one item').item.json.files }) }}"
+          },
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "c89bf24e-d93b-5f92-bfe2-9ee267426916",
+      "name": "Record document",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2860,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "ALcredPostgresDm",
+          "name": "Postgres - demo"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fromEmail": "automation-lab@lab.local",
+        "toEmail": "={{ $('Config').item.json.report_to }}",
+        "subject": "=[Automation Lab] {{ $('Bundle PDFs into one item').item.json.count }} certificates generated",
+        "options": {
+          "attachments": "data"
+        },
+        "emailFormat": "html",
+        "html": "=<p>{{ $('Bundle PDFs into one item').item.json.count }} certificates rendered from <code>{{ $('Config').item.json.file }}</code>; ZIP attached and stored in MinIO (reports/certificates/).</p><ul>{{ $('Bundle PDFs into one item').item.json.files.map(f => '<li>' + f + '</li>').join('') }}</ul>"
+      },
+      "id": "4dc59f80-9c68-549c-8b24-9750bec3c7e8",
+      "name": "Email bundle (Mailpit)",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        2600,
+        220
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "smtp": {
+          "id": "ALcredSmtpMailpt",
+          "name": "SMTP - Mailpit"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "## R02 - Bulk certificates from CSV\nEach CSV row becomes an HTML certificate (Code, per item) rendered by **docgen** `/render/pdf` (batched 2 at a time). PDFs are written individually, then bundled into one item and zipped (Compression node), stored in `data/out/` and MinIO `reports/certificates/`, logged in `documents` and e-mailed.\n\nSwap the CSV for a Postgres query or a form (T05) to drive it from live data.",
+        "height": 220,
+        "width": 640,
+        "color": 4
+      },
+      "id": "4d49a083-3847-5116-b81d-5dbbcd388534",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -40,
+        -330
+      ]
+    }
+  ],
+  "connections": {
+    "Run once (manual / CLI)": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "Read CSV",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read CSV": {
+      "main": [
+        [
+          {
+            "node": "Extract rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract rows": {
+      "main": [
+        [
+          {
+            "node": "Certificate HTML (per row)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Certificate HTML (per row)": {
+      "main": [
+        [
+          {
+            "node": "Render PDF (docgen)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Render PDF (docgen)": {
+      "main": [
+        [
+          {
+            "node": "Write each PDF",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write each PDF": {
+      "main": [
+        [
+          {
+            "node": "Bundle PDFs into one item",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Bundle PDFs into one item": {
+      "main": [
+        [
+          {
+            "node": "Zip certificates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Zip certificates": {
+      "main": [
+        [
+          {
+            "node": "Write ZIP",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write ZIP": {
+      "main": [
+        [
+          {
+            "node": "Upload ZIP (MinIO)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Email bundle (Mailpit)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload ZIP (MinIO)": {
+      "main": [
+        [
+          {
+            "node": "Record document",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Africa/Tripoli",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "ALP01ErrorHandle"
+  },
+  "pinData": {},
+  "versionId": "6fa192d7-998a-58c3-a238-68473ce7f419",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "description": "One PDF certificate per CSV row via docgen, zipped, stored in MinIO, e-mailed."
+  },
+  "id": "ALR02BulkCertifi",
+  "tags": [
+    {
+      "name": "automation-lab"
+    },
+    {
+      "name": "Documents"
+    }
+  ]
+}

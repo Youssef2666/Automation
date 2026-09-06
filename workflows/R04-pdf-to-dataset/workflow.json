@@ -1,0 +1,479 @@
+{
+  "name": "R04 - PDF to Structured Fields to Dataset",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "50133461-074f-555f-a346-ce40733a2ed1",
+      "name": "Run once (manual / CLI)",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "20f5e655-836c-5070-9041-0065c6365566",
+              "name": "file",
+              "value": "/home/node/.n8n-files/seed/invoice-locked.pdf",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "6791a202-4988-5611-9414-59f782be50f1",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        260,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "fileSelector": "={{ $json.file }}",
+        "options": {
+          "dataPropertyName": "data"
+        }
+      },
+      "id": "faa26266-fbc2-57fc-98f3-27826a86566a",
+      "name": "Read PDF",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        520,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://docgen:8090/pdf/extract",
+        "options": {
+          "timeout": 60000
+        },
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "file",
+              "inputDataFieldName": "data"
+            }
+          ]
+        }
+      },
+      "id": "30402205-d40d-5029-a5ab-9cd5af7528ed",
+      "name": "Extract text + tables (docgen)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        780,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "jsCode": "// docgen /pdf/extract -> {filename, pages, text, tables:[{page, header, rows}], page_data}\nconst src = $input.first().json;\nconst text = String(src.text || '');\nconst grab = (re) => { const m = text.match(re); return m ? m[1].trim() : null; };\nconst num = (s) => { const n = Number(String(s ?? '').replace(/[^0-9.\\-]/g, '')); return Number.isFinite(n) ? n : null; };\n\nconst header = {\n  invoice_number: grab(/Invoice number:\\s*([A-Z0-9-]+)/i),\n  issue_date: grab(/Issue date:\\s*(\\d{4}-\\d{2}-\\d{2})/i),\n  due_date: grab(/Due date:\\s*(\\d{4}-\\d{2}-\\d{2})/i),\n  currency: grab(/\\b(USD|EUR|GBP|LYD|EGP)\\b/) || 'USD',\n  subtotal: num(grab(/Subtotal\\s+([0-9.,]+)/i)),\n  vat: num(grab(/(?:VAT|Tax)[^\\n]*?\\s([0-9.,]+)\\s*$/im)),\n  total: num(grab(/^Total\\b(?:\\s*\\([A-Z]{3}\\))?(?: due)?[^\\n0-9]*([0-9.,]+)\\s*$/im)),   // ^ anchor so \"Subtotal\" never matches\n  emails: Array.from(new Set(text.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[a-z]{2,}/g) || [])),\n};\n\n// Line items: the first table whose header has a description + amount column.\nconst isItems = (t) => (t.header || []).some(h => /desc/i.test(h)) && (t.header || []).some(h => /amount|total/i.test(h));\nconst table = (src.tables || []).find(isItems) || null;\nconst items = [];\nif (table) {\n  const cols = table.header.map(h => h.toLowerCase());\n  const idx = (re) => cols.findIndex(c => re.test(c));\n  const iDesc = idx(/desc/), iQty = idx(/qty|quantity/), iUnit = idx(/unit|price/), iAmt = idx(/amount|total/);\n  for (const r of table.rows) {\n    const amount = num(r[iAmt]);\n    if (amount === null) continue;                          // skips subtotal/total rows if they were captured\n    items.push({ description: r[iDesc], qty: num(r[iQty]), unit_price: num(r[iUnit]), amount,\n                 line_ok: r[iQty] !== undefined && r[iUnit] !== undefined ? Math.abs(num(r[iQty]) * num(r[iUnit]) - amount) < 0.01 : null });\n  }\n}\nconst itemsSum = Math.round(items.reduce((a, i) => a + i.amount, 0) * 100) / 100;\nconst checks = {\n  has_invoice_number: !!header.invoice_number,\n  has_items: items.length > 0,\n  items_sum_matches_subtotal: header.subtotal !== null ? Math.abs(itemsSum - header.subtotal) < 0.01 : null,\n  every_line_ok: items.every(i => i.line_ok !== false),\n};\nconst ok = Object.values(checks).every(v => v !== false);\nreturn [{ json: { source_file: src.filename, pages: src.pages, ok, checks, header, items_sum: itemsSum,\n                  items, item_count: items.length } }];"
+      },
+      "id": "ba9c9f7c-39fb-5261-94dc-a4d6032d7428",
+      "name": "Parse fields",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1040,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ec11c9d5-a3d7-52e5-91c5-4fedfcabfc53",
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a625a71a-ea63-5b3d-a2cf-4fb8d4fba4b5",
+      "name": "Checks pass?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1300,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "errorMessage": "=R04: {{ JSON.stringify($json.checks) }}"
+      },
+      "id": "348a2f33-59d6-5bb0-a430-5995d0906ac3",
+      "name": "Extraction failed checks",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        1560,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "schema": {
+          "__rl": true,
+          "value": "public",
+          "mode": "list"
+        },
+        "table": {
+          "__rl": true,
+          "value": "documents",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "kind": "invoice-extract",
+            "file_name": "={{ $json.source_file }}",
+            "storage_key": "={{ $('Config').item.json.file }}",
+            "meta": "={{ JSON.stringify({ header: $json.header, items: $json.items, checks: $json.checks, items_sum: $json.items_sum }) }}"
+          },
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "outputColumns": [
+            "*"
+          ]
+        }
+      },
+      "id": "4145cd9c-c307-5ff0-8320-4bfcedfa618a",
+      "name": "Record document",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1560,
+        220
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "ALcredPostgresDm",
+          "name": "Postgres - demo"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "items",
+        "options": {}
+      },
+      "id": "7f7d0588-eba0-5b55-8155-3272e163d02b",
+      "name": "Split line items",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        1300,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "f6015032-0a54-5bab-839d-118281f673a5",
+              "name": "invoice_number",
+              "value": "={{ $('Parse fields').item.json.header.invoice_number }}",
+              "type": "string"
+            },
+            {
+              "id": "bd634777-d989-5003-a254-14c0278faef6",
+              "name": "issue_date",
+              "value": "={{ $('Parse fields').item.json.header.issue_date }}",
+              "type": "string"
+            },
+            {
+              "id": "dd4c54a3-4dcd-5771-80ff-5f28813b4e08",
+              "name": "currency",
+              "value": "={{ $('Parse fields').item.json.header.currency }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {},
+        "includeOtherFields": true
+      },
+      "id": "255afbba-bfdb-57d2-a743-dd8f739b2f98",
+      "name": "Tag rows",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1560,
+        440
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "csv",
+        "options": {
+          "fileName": "=extract-{{ $('Parse fields').item.json.header.invoice_number }}.csv"
+        }
+      },
+      "id": "c9888e67-bdcc-5d6c-8f1a-12503d849a5d",
+      "name": "Line items to CSV",
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        1820,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "=/home/node/.n8n-files/data/out/{{ $binary.data.fileName }}",
+        "dataPropertyName": "data",
+        "options": {}
+      },
+      "id": "01f87621-544e-53ce-8c8e-0f0dc621baeb",
+      "name": "Write CSV",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        2080,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build the JSON file in a Code node (base64 binary): Convert to File emitted nothing for a single DB row.\nconst rec = $('Parse fields').first().json;\nconst name = `extract-${rec.header.invoice_number}.json`;\nconst body = JSON.stringify({ document_id: $json.id, ...rec }, null, 2);\nreturn [{ json: { fileName: name, bytes: body.length },\n          binary: { data: { data: Buffer.from(body, 'utf8').toString('base64'), mimeType: 'application/json', fileName: name } } }];"
+      },
+      "id": "240926e4-630b-5474-8617-3397162c8fd0",
+      "name": "Record to JSON file",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1820,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "=/home/node/.n8n-files/data/out/{{ $binary.data.fileName }}",
+        "dataPropertyName": "data",
+        "options": {}
+      },
+      "id": "8fbef5db-bd0e-584d-ba2d-a3d7fff3db33",
+      "name": "Write JSON",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        2080,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## R04 - PDF -> fields -> dataset\nThe \"no API\" case: the only export is a PDF. **docgen** `/pdf/extract` (pdfplumber) returns the text and every detected table; the Code node pulls header fields with regexes, the line items from the table, and checks that the items add up to the printed subtotal before anything is stored.\n\nOutputs: `documents` row (meta = structured record), `data/out/extract-<invoice>.csv` (line items) and `.json`. Chain with R03 to turn the rows into an Arabic report.",
+        "height": 240,
+        "width": 640,
+        "color": 4
+      },
+      "id": "8772c4b6-07b2-5ace-8bc0-c36c9b700a60",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -40,
+        -340
+      ]
+    }
+  ],
+  "connections": {
+    "Run once (manual / CLI)": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "Read PDF",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read PDF": {
+      "main": [
+        [
+          {
+            "node": "Extract text + tables (docgen)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract text + tables (docgen)": {
+      "main": [
+        [
+          {
+            "node": "Parse fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse fields": {
+      "main": [
+        [
+          {
+            "node": "Checks pass?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Split line items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Checks pass?": {
+      "main": [
+        [
+          {
+            "node": "Record document",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Extraction failed checks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record document": {
+      "main": [
+        [
+          {
+            "node": "Record to JSON file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record to JSON file": {
+      "main": [
+        [
+          {
+            "node": "Write JSON",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split line items": {
+      "main": [
+        [
+          {
+            "node": "Tag rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tag rows": {
+      "main": [
+        [
+          {
+            "node": "Line items to CSV",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Line items to CSV": {
+      "main": [
+        [
+          {
+            "node": "Write CSV",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Africa/Tripoli",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "ALP01ErrorHandle"
+  },
+  "pinData": {},
+  "versionId": "a5eae96d-74b6-50c3-b9bb-adcc1b1e8eba",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "description": "Extracts header fields and the line-item table from a PDF invoice into a dataset."
+  },
+  "id": "ALR04PdfToDatase",
+  "tags": [
+    {
+      "name": "automation-lab"
+    },
+    {
+      "name": "Documents"
+    }
+  ]
+}

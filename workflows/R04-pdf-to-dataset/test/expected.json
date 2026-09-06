@@ -1,0 +1,70 @@
+{
+  "source_file": "invoice-locked.pdf",
+  "pages": 1,
+  "ok": true,
+  "checks": {
+    "has_invoice_number": true,
+    "has_items": true,
+    "items_sum_matches_subtotal": true,
+    "every_line_ok": true
+  },
+  "header": {
+    "invoice_number": "INV-2026-0142",
+    "issue_date": "2026-08-25",
+    "due_date": "2026-09-24",
+    "currency": "USD",
+    "subtotal": 2715,
+    "vat": 380.1,
+    "total": 3095.1,
+    "emails": [
+      "billing@lab.local",
+      "accounts@lab.local"
+    ]
+  },
+  "items_sum": 2715,
+  "items": [
+    {
+      "description": "Workflow automation setup",
+      "qty": 1,
+      "unit_price": 1200,
+      "amount": 1200,
+      "line_ok": true
+    },
+    {
+      "description": "Monthly support retainer (Aug)",
+      "qty": 1,
+      "unit_price": 450,
+      "amount": 450,
+      "line_ok": true
+    },
+    {
+      "description": "Custom PDF report template",
+      "qty": 2,
+      "unit_price": 180,
+      "amount": 360,
+      "line_ok": true
+    },
+    {
+      "description": "Arabic OCR calibration",
+      "qty": 3,
+      "unit_price": 95,
+      "amount": 285,
+      "line_ok": true
+    },
+    {
+      "description": "Training session (remote)",
+      "qty": 2,
+      "unit_price": 150,
+      "amount": 300,
+      "line_ok": true
+    },
+    {
+      "description": "Server hosting (3 months)",
+      "qty": 3,
+      "unit_price": 40,
+      "amount": 120,
+      "line_ok": true
+    }
+  ],
+  "item_count": 6
+}
