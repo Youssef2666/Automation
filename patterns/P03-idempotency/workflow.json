@@ -1,0 +1,286 @@
+{
+  "name": "P03 - Idempotency guard",
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "id": "34596049-016a-5845-a283-32a1920e9de5",
+      "name": "When called by another workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "65b088ef-7614-5482-bb45-8344d873f472",
+              "leftValue": "={{ String($json.external_id ?? '') }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "63e5dd9f-18e0-53cb-8046-50d5234f17e1",
+      "name": "Has external_id?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        260,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "errorMessage": "P03 idempotency guard: input item needs a non-empty external_id"
+      },
+      "id": "58cc92a6-9733-54e6-8f94-619f3cfc2399",
+      "name": "Missing external_id",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        520,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "87f55e9d-57b0-5561-b3dc-8e34939d66f9",
+              "name": "external_id",
+              "value": "={{ String($json.external_id).trim() }}",
+              "type": "string"
+            },
+            {
+              "id": "dc265f32-d76d-536a-ba9a-61a752662503",
+              "name": "scope",
+              "value": "={{ String($json.scope || 'default').trim() }}",
+              "type": "string"
+            },
+            {
+              "id": "86270bd6-622f-5248-9d30-baaac6e57ff0",
+              "name": "ttl_seconds",
+              "value": "={{ Number($json.ttl_seconds) > 0 ? Math.floor(Number($json.ttl_seconds)) : 86400 }}",
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "afd88db9-54ef-5300-ae43-9e6adc139a5e",
+      "name": "Normalize input",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        520,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "incr",
+        "key": "=idem:{{ $json.scope }}:{{ $json.external_id }}",
+        "expire": true,
+        "ttl": "={{ $json.ttl_seconds }}"
+      },
+      "id": "5b9010d8-da27-558d-b894-af1bbd783d6c",
+      "name": "Mark seen (INCR + TTL)",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        780,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 500,
+      "credentials": {
+        "redis": {
+          "id": "ALcredRedisLocal",
+          "name": "Redis - local"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "ff6777d2-17c7-5606-8ad4-07fbcab4bfde",
+              "name": "ok",
+              "value": true,
+              "type": "boolean"
+            },
+            {
+              "id": "49311ad2-ffd5-5511-a656-632aa758be84",
+              "name": "duplicate",
+              "value": "={{ Number(Object.values($json)[0]) > 1 }}",
+              "type": "boolean"
+            },
+            {
+              "id": "42292f5e-a892-545a-bc64-5ae6debdd1ab",
+              "name": "count",
+              "value": "={{ Number(Object.values($json)[0]) }}",
+              "type": "number"
+            },
+            {
+              "id": "0cc9bd3a-504c-5b4d-bacb-3af08595d4a3",
+              "name": "key",
+              "value": "={{ Object.keys($json)[0] }}",
+              "type": "string"
+            },
+            {
+              "id": "79fcefd7-6f05-593d-af35-884fa85dd825",
+              "name": "external_id",
+              "value": "={{ $('Normalize input').item.json.external_id }}",
+              "type": "string"
+            },
+            {
+              "id": "343cd270-d53a-5c48-87b7-6b317b83de8d",
+              "name": "scope",
+              "value": "={{ $('Normalize input').item.json.scope }}",
+              "type": "string"
+            },
+            {
+              "id": "99b2c770-fc92-5246-a9b1-b0cde4fa8b22",
+              "name": "ttl_seconds",
+              "value": "={{ $('Normalize input').item.json.ttl_seconds }}",
+              "type": "number"
+            },
+            {
+              "id": "7322ada8-789e-509f-acf0-5d7747cda1bf",
+              "name": "response",
+              "value": "={{ Number(Object.values($json)[0]) > 1 ? 'duplicate (seen ' + Object.values($json)[0] + ' times)' : 'first time' }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "4da8877c-1a96-544d-b2aa-5c951f71e63e",
+      "name": "Result",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1040,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## P03 - Idempotency guard\nCall with `{external_id, scope?, ttl_seconds?}` **before** the side effect.\n\n`INCR idem:<scope>:<external_id>` (TTL default 24 h): count 1 = first time, >1 = replay.\nReturns `{ok, duplicate, count, key, response}` - the caller skips the insert/charge when `duplicate` is true.\n\nTrade-off: the key is marked even if the caller's side effect fails afterwards (see README for the mark-after-success variant).",
+        "height": 250,
+        "width": 600,
+        "color": 4
+      },
+      "id": "87896651-850f-5f7c-ba84-57f669f99499",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -40,
+        -330
+      ]
+    }
+  ],
+  "connections": {
+    "When called by another workflow": {
+      "main": [
+        [
+          {
+            "node": "Has external_id?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has external_id?": {
+      "main": [
+        [
+          {
+            "node": "Normalize input",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Missing external_id",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize input": {
+      "main": [
+        [
+          {
+            "node": "Mark seen (INCR + TTL)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark seen (INCR + TTL)": {
+      "main": [
+        [
+          {
+            "node": "Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Africa/Tripoli",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "ALP01ErrorHandle"
+  },
+  "pinData": {},
+  "versionId": "1fe43e40-a0ed-574d-9b6f-32e058c5ffc1",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "description": "Marks an external id as seen (Redis INCR + TTL) and tells the caller whether it is a replay."
+  },
+  "id": "ALP03Idempotency",
+  "tags": [
+    {
+      "name": "automation-lab"
+    },
+    {
+      "name": "pattern"
+    },
+    {
+      "name": "P03"
+    }
+  ]
+}

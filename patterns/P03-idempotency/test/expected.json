@@ -1,0 +1,12 @@
+{
+  "_comment": "First call -> count 1 / duplicate false. Second call within the TTL -> count 2 / duplicate true.",
+  "first_call": {
+    "ok": true, "duplicate": false, "count": 1, "key": "idem:t01-orders:evt-order-20260901-0001",
+    "external_id": "evt-order-20260901-0001", "scope": "t01-orders", "ttl_seconds": 86400, "response": "first time"
+  },
+  "second_call": {
+    "ok": true, "duplicate": true, "count": 2, "key": "idem:t01-orders:evt-order-20260901-0001",
+    "external_id": "evt-order-20260901-0001", "scope": "t01-orders", "ttl_seconds": 86400, "response": "duplicate (seen 2 times)"
+  },
+  "missing_external_id": "Stop and Error: 'P03 idempotency guard: input item needs a non-empty external_id'"
+}

@@ -1,0 +1,401 @@
+{
+  "name": "T01 - Webhook to Database",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "t01-orders",
+        "responseMode": "responseNode",
+        "options": {},
+        "authentication": "headerAuth"
+      },
+      "id": "80e283b1-c3da-5769-931c-5fa4c641c4c7",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "974a5ae6-0866-53e9-b091-e7479bebcf46",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "ALcredWebhookHdr",
+          "name": "Webhook - header auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// One item in (the webhook request). Validate the JSON body field by field and report every problem at once.\nconst body = $input.first().json.body || {};\nconst errors = [];\nconst isStr = (v) => typeof v === 'string' && v.trim().length > 0;\nif (!isStr(body.external_id)) errors.push('external_id: non-empty string required');\nif (!isStr(body.order_number)) errors.push('order_number: non-empty string required');\nconst email = body.customer && body.customer.email;\nif (!isStr(email) || !/^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$/.test(email)) errors.push('customer.email: valid e-mail required');\nif (!Array.isArray(body.items) || body.items.length === 0) errors.push('items: non-empty array required');\nelse body.items.forEach((it, i) => {\n  if (!isStr(it.sku)) errors.push(`items[${i}].sku: required`);\n  if (!(Number(it.qty) > 0)) errors.push(`items[${i}].qty: positive number required`);\n});\nif (typeof body.total !== 'number' || !(body.total >= 0)) errors.push('total: number >= 0 required');\nif (body.ordered_at !== undefined && Number.isNaN(Date.parse(body.ordered_at))) errors.push('ordered_at: ISO-8601 date required');\nreturn [{ json: {\n  valid: errors.length === 0,\n  errors,\n  external_id: isStr(body.external_id) ? body.external_id.trim() : null,\n  event_type: 'order.created',\n  source: isStr(body.source) ? body.source : 'webhook',\n}}];"
+      },
+      "id": "eb140fd0-5659-5f13-a566-65dfcfdae555",
+      "name": "Validate payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        260,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "a1c10d9f-33d4-55d3-ae56-57d27568e215",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "0d7d5d9e-14ae-5a09-86ff-3557fb5c1d14",
+      "name": "Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        520,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "options": {
+          "responseCode": 400
+        },
+        "responseBody": "={{ { ok: false, errors: $json.errors } }}"
+      },
+      "id": "959ff5d4-b899-52f2-baad-ca7266ebf417",
+      "name": "Respond 400",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        780,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "336ead44-fd5e-56b0-b52d-0766f93ee3c2",
+              "name": "external_id",
+              "value": "={{ $json.external_id }}",
+              "type": "string"
+            },
+            {
+              "id": "ca121f10-6478-5143-9a9c-cd8e11d659b6",
+              "name": "scope",
+              "value": "t01-orders",
+              "type": "string"
+            },
+            {
+              "id": "b56d16fc-189c-5e74-affc-47aa80cace6e",
+              "name": "ttl_seconds",
+              "value": 86400,
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "04b57ff9-bc9a-5f10-ba4e-e4ea44c604c6",
+      "name": "Guard input",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        780,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "ALP03Idempotency",
+          "mode": "id",
+          "cachedResultName": "P03 - Idempotency guard"
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "afb9c3e2-e9fe-5a61-885d-f6d575de514a",
+      "name": "Idempotency guard (P03)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1,
+      "position": [
+        1040,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "1b2fc7cb-6c6a-555f-b847-162fce6f9562",
+              "leftValue": "={{ $json.duplicate }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "60706b4f-238f-591c-a0e1-a25cabe5a616",
+      "name": "Duplicate?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1300,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "options": {},
+        "responseBody": "={{ { ok: true, duplicate: true, external_id: $json.external_id, seen: $json.count } }}"
+      },
+      "id": "44f0a934-aa2d-51ee-a0b4-56094512b78f",
+      "name": "Respond 200 (duplicate)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1560,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "schema": {
+          "__rl": true,
+          "value": "public",
+          "mode": "list"
+        },
+        "table": {
+          "__rl": true,
+          "value": "webhook_events",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "external_id": "={{ $('Validate payload').item.json.external_id }}",
+            "source": "={{ $('Validate payload').item.json.source }}",
+            "event_type": "={{ $('Validate payload').item.json.event_type }}",
+            "payload": "={{ JSON.stringify($('Webhook').item.json.body) }}",
+            "received_at": "={{ $now.toISO() }}"
+          },
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "outputColumns": [
+            "*"
+          ]
+        }
+      },
+      "id": "a5194204-7286-59ec-a610-0b71f27e103d",
+      "name": "Insert webhook_events",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1560,
+        220
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "postgres": {
+          "id": "ALcredPostgresDm",
+          "name": "Postgres - demo"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "options": {
+          "responseCode": 201
+        },
+        "responseBody": "={{ { ok: true, id: $json.id, external_id: $json.external_id } }}"
+      },
+      "id": "5903ea4d-cb87-5534-8b3f-24f68ec95563",
+      "name": "Respond 201",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1820,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## T01 - Webhook to Database\n`POST /webhook/t01-orders` with header `X-Lab-Key: <LAB_WEBHOOK_KEY>`.\n\n- bad schema -> **400** with every error listed\n- replayed `external_id` -> **200** `{duplicate:true}` (P03, Redis, 24 h)\n- new event -> row in `webhook_events` -> **201** with the row id\n\nFailures anywhere -> P01 error handler.",
+        "height": 230,
+        "width": 560,
+        "color": 4
+      },
+      "id": "fb60a757-0295-535a-93f1-5ae17a34896b",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -40,
+        -330
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate payload": {
+      "main": [
+        [
+          {
+            "node": "Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Valid?": {
+      "main": [
+        [
+          {
+            "node": "Guard input",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond 400",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guard input": {
+      "main": [
+        [
+          {
+            "node": "Idempotency guard (P03)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Idempotency guard (P03)": {
+      "main": [
+        [
+          {
+            "node": "Duplicate?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Duplicate?": {
+      "main": [
+        [
+          {
+            "node": "Respond 200 (duplicate)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Insert webhook_events",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert webhook_events": {
+      "main": [
+        [
+          {
+            "node": "Respond 201",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Africa/Tripoli",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "ALP01ErrorHandle"
+  },
+  "pinData": {},
+  "versionId": "331886d0-e8e0-5ff4-b1bf-4037d6432105",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "description": "Validated, idempotent webhook ingestion into Postgres with proper HTTP responses."
+  },
+  "id": "ALT01WebhookToDa",
+  "tags": [
+    {
+      "name": "automation-lab"
+    },
+    {
+      "name": "Triggers"
+    }
+  ]
+}
