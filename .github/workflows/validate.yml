@@ -1,0 +1,48 @@
+# Folder contract, workflow JSON structure, blocking secret scan, docs links, script unit tests, compose config.
+# Needs no secrets. This is the CI gate for every push and PR (PRD section 11, goal G6).
+name: validate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: validate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install optional Pillow (screenshot width check)
+        run: python -m pip install --quiet pillow
+
+      - name: Folder contract + secret scan + markdown links (warnings are errors)
+        run: python scripts/validate.py --strict --docs
+
+      - name: Script unit tests
+        run: python -m unittest discover -s scripts/tests -v
+
+      - name: Compose file is valid (no daemon needed)
+        run: docker compose config -q
+
+      - name: Seed generator self-check
+        # Enforced when generate_seed.py exposes --check; otherwise skipped and said so in the log.
+        continue-on-error: false
+        run: |
+          if python seed/generate_seed.py --help 2>/dev/null | grep -q -- '--check'; then
+            python seed/generate_seed.py --check
+          else
+            echo "seed/generate_seed.py has no --check flag - step skipped"
+          fi

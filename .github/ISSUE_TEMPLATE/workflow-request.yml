@@ -1,0 +1,70 @@
+name: Workflow request
+description: Propose a workflow or pattern for the coverage matrix.
+title: "[T00] proposed title"
+labels: [workflow-request]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The catalog is curated (docs/PRD.md section 9). A request is accepted when it adds coverage that no existing
+        item shows and can run offline on the stack's synthetic data. Prefix the title with the category letter and
+        `00` (`[T00]`, `[D00]`, `[P00]`, ...) and the maintainer assigns the number.
+
+  - type: dropdown
+    id: category
+    attributes:
+      label: Category
+      options:
+        - T - Triggers
+        - D - Data & ETL
+        - M - Monitoring
+        - R - Documents & reports
+        - A - AI (local only)
+        - B - Business operations
+        - O - DevOps & self-automation
+        - P - Patterns
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem it solves
+      description: One paragraph. The real situation, and what goes wrong when people do it by hand.
+    validations:
+      required: true
+
+  - type: textarea
+    id: coverage
+    attributes:
+      label: What it covers that the matrix does not
+      description: Name the closest existing item and the gap.
+    validations:
+      required: true
+
+  - type: textarea
+    id: services
+    attributes:
+      label: Services and data
+      description: Which compose profiles it needs and which seed tables or mock-api endpoints it reads/writes.
+      placeholder: core + docs; reads demo.orders, writes demo.documents, uploads to MinIO bucket reports
+    validations:
+      required: true
+
+  - type: input
+    id: patterns
+    attributes:
+      label: Patterns it would reference
+      placeholder: P01, P03
+
+  - type: checkboxes
+    id: constraints
+    attributes:
+      label: Constraints
+      options:
+        - label: Core path runs with no cloud account, API key or card
+          required: true
+        - label: Only synthetic data; no real people, clients or employers
+          required: true
+        - label: Uses only node types from the allowlist (no Execute Command, no Python Code nodes)
+          required: true

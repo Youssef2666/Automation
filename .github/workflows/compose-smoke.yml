@@ -1,0 +1,58 @@
+# Boots the core profile on a clean runner, bootstraps n8n, imports every workflow and fires T01.
+# Proves PRD goal G2 (clone -> first execution) still holds whenever the stack, seed or scripts change.
+# `down -v` in the cleanup step wipes the runner's volumes only; never run that against a local stack unasked.
+name: compose-smoke
+
+on:
+  pull_request:
+    paths:
+      - "docker/**"
+      - "docker-compose.yml"
+      - ".env.example"
+      - "seed/**"
+      - "scripts/**"
+      - ".github/workflows/compose-smoke.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: compose-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Dummy environment
+        run: cp .env.example .env
+
+      - name: Compose file is valid
+        run: docker compose config -q
+
+      - name: Boot core profile (waits for healthchecks)
+        run: docker compose --profile core up -d --wait --wait-timeout 300
+
+      - name: Bootstrap (owner, API key, credentials, import, publish)
+        run: bash scripts/setup.sh
+
+      - name: Smoke test (T01 webhook -> Postgres, Mailpit, MinIO, timing)
+        run: python scripts/dev/smoke.py
+
+      - name: Service status and logs (on failure)
+        if: failure()
+        run: |
+          docker compose --profile core ps
+          docker compose --profile core logs --tail 100
+
+      - name: Cleanup
+        if: always()
+        run: docker compose --profile core down -v --remove-orphans

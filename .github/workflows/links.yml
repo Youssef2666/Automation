@@ -1,0 +1,34 @@
+# Dead-link check over every markdown file. Runs offline (local files and anchors only), so it needs no
+# network and cannot flake on third-party sites. scripts/validate.py --docs covers the same ground locally.
+name: links
+
+on:
+  schedule:
+    - cron: "0 6 * * 1" # Mondays 06:00 UTC
+  pull_request:
+    paths:
+      - "**/*.md"
+      - ".github/workflows/links.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  links:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: lychee (offline)
+        uses: lycheeverse/lychee-action@v2
+        with:
+          # hero.gif is generated in milestone M5 and referenced from an HTML comment until then.
+          args: >-
+            --offline
+            --no-progress
+            --root-dir "${{ github.workspace }}"
+            --exclude "docs/assets/hero.gif"
+            "**/*.md"
+          fail: true

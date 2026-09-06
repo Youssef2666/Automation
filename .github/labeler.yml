@@ -1,0 +1,37 @@
+# Path -> label map for actions/labeler@v5 (used by .github/workflows/triage.yml on pull requests).
+area:triggers:
+  - changed-files:
+      - any-glob-to-any-file: ["workflows/T*/**"]
+area:data:
+  - changed-files:
+      - any-glob-to-any-file: ["workflows/D*/**"]
+area:monitoring:
+  - changed-files:
+      - any-glob-to-any-file: ["workflows/M*/**"]
+area:documents:
+  - changed-files:
+      - any-glob-to-any-file: ["workflows/R*/**", "docker/docgen/**"]
+area:ai:
+  - changed-files:
+      - any-glob-to-any-file: ["workflows/A*/**"]
+area:business:
+  - changed-files:
+      - any-glob-to-any-file: ["workflows/B*/**"]
+area:devops:
+  - changed-files:
+      - any-glob-to-any-file: ["workflows/O*/**"]
+area:patterns:
+  - changed-files:
+      - any-glob-to-any-file: ["patterns/**"]
+area:stack:
+  - changed-files:
+      - any-glob-to-any-file: ["docker/**", "docker-compose.yml", ".env.example", "seed/**"]
+area:scripts:
+  - changed-files:
+      - any-glob-to-any-file: ["scripts/**", "Makefile"]
+area:docs:
+  - changed-files:
+      - any-glob-to-any-file: ["docs/**", "README.md", "CONTRIBUTING.md", "SECURITY.md"]
+area:ci:
+  - changed-files:
+      - any-glob-to-any-file: [".github/**"]

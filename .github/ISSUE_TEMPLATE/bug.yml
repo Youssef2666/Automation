@@ -1,0 +1,64 @@
+name: Bug report
+description: A workflow does not import, does not execute against the seed data, or the stack misbehaves.
+title: "[ID] short description"
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Prefix the title with the catalog id in brackets (for example `[T03]`, `[P02]`, or `[stack]`) so it gets
+        labelled automatically. Never paste `.env` contents, credentials or real email addresses.
+
+  - type: input
+    id: item
+    attributes:
+      label: Catalog item
+      description: Folder name, or "stack" / "scripts" / "docs".
+      placeholder: workflows/T03-polling-without-webhooks
+    validations:
+      required: true
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: Exact error text from n8n, the script, or `docker compose logs`.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      value: |
+        1. cp .env.example .env
+        2. docker compose --profile core up -d && bash scripts/setup.sh
+        3. ...
+    validations:
+      required: true
+
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: Output of `docker compose version` and your OS. The n8n image is pinned to 2.37.10 unless you changed it.
+      placeholder: Docker Compose v2.29, Ubuntu 24.04
+    validations:
+      required: true
+
+  - type: dropdown
+    id: profiles
+    attributes:
+      label: Profiles running
+      multiple: true
+      options: [core, docs, ai, observability, queue]
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: "`python scripts/validate.py <folder>` passes on my checkout"
+        - label: "`curl -s http://localhost:5678/healthz` returns ok"
+        - label: "No secrets or real data in this report"
+          required: true

@@ -1,0 +1,54 @@
+# On a v* tag: build release notes from conventional commits since the previous tag and publish a GitHub
+# release with a zip of workflows/ + patterns/ (import-ready JSON, READMEs, screenshots, test payloads).
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history for tags and the changelog
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Previous tag
+        id: prev
+        run: |
+          prev="$(git describe --tags --abbrev=0 "${GITHUB_REF_NAME}^" 2>/dev/null || true)"
+          echo "tag=${prev}" >> "$GITHUB_OUTPUT"
+          echo "previous tag: '${prev:-none}'"
+
+      - name: Release notes
+        env:
+          PREV_TAG: ${{ steps.prev.outputs.tag }}
+        run: |
+          if [ -n "$PREV_TAG" ]; then
+            python scripts/changelog.py --since "$PREV_TAG" > RELEASE_NOTES.md
+          else
+            python scripts/changelog.py > RELEASE_NOTES.md
+          fi
+          cat RELEASE_NOTES.md
+
+      - name: Bundle workflows and patterns
+        run: |
+          zip -qr "automation-lab-workflows-${GITHUB_REF_NAME}.zip" workflows patterns
+          ls -la automation-lab-workflows-*.zip
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Automation Lab ${{ github.ref_name }}
+          body_path: RELEASE_NOTES.md
+          files: automation-lab-workflows-*.zip

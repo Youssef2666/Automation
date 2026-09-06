@@ -1,0 +1,48 @@
+# Regenerates the coverage matrix in README.md from workflow/pattern front-matter and commits it back.
+# Only runs on main when a workflow or pattern folder (or the generator) changed. Uses the built-in token.
+name: matrix
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "workflows/**"
+      - "patterns/**"
+      - "scripts/build-matrix.py"
+      - ".github/workflows/matrix.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: matrix-main
+  cancel-in-progress: false
+
+jobs:
+  matrix:
+    if: "!contains(github.event.head_commit.message, '[skip ci]')"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Regenerate matrix
+        run: python scripts/build-matrix.py
+
+      - name: Commit if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add README.md
+          if git diff --quiet --cached; then
+            echo "matrix already up to date"
+          else
+            git commit -m "docs: regenerate matrix [skip ci]"
+            git push
+          fi

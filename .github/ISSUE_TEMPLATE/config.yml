@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security report
+    url: https://github.com/Youssef2666/Automation/blob/main/SECURITY.md
+    about: How to report a committed secret or a vulnerability in the stack configuration.
+  - name: n8n itself
+    url: https://community.n8n.io
+    about: Questions about n8n features or bugs in n8n belong to the n8n community, not this lab.

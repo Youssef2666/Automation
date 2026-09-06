@@ -1,0 +1,35 @@
+# Keeps action pins and the two locally built images current. n8n and the other compose images are bumped
+# deliberately by hand (see docs/decisions/0001-n8n-version-pin.md) because node typeVersions are allowlisted.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    labels: [area:ci, dependencies]
+    commit-message:
+      prefix: ci
+
+  - package-ecosystem: docker
+    directory: /docker/mock-api
+    schedule:
+      interval: weekly
+    labels: [area:stack, dependencies]
+    commit-message:
+      prefix: build
+
+  - package-ecosystem: docker
+    directory: /docker/docgen
+    schedule:
+      interval: weekly
+    labels: [area:stack, dependencies]
+    commit-message:
+      prefix: build
+
+  - package-ecosystem: pip
+    directory: /docker/docgen
+    schedule:
+      interval: weekly
+    labels: [area:documents, dependencies]
+    commit-message:
+      prefix: build
