@@ -1,0 +1,10 @@
+{
+  "_comment": "What the Form Trigger emits for the sample submission (keys are the field labels).",
+  "Name": "Lina Haddad",
+  "Email": "lina.haddad@lab.local",
+  "Company": "Sample Bakery",
+  "Topic": "Demo request",
+  "Message": "Please show me the invoice workflow.",
+  "submittedAt": "2026-09-07T00:45:00.000+02:00",
+  "formMode": "production"
+}

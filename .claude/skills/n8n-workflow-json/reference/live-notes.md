@@ -60,3 +60,40 @@ Facts proven against the running stack on 2026-09-06. Add to this file whenever 
   `jsonBody: ={{ JSON.stringify(obj) }}` work; hostnames `n8n:5678`, `mock-api:8080` resolve inside the network.
 - Code node `runOnceForEachItem` + `$('Earlier node').item.json` pairs correctly even when the input comes from
   an HTTP node's error output.
+- **Re-importing an active trigger workflow leaves the old trigger running in the n8n process** (a file drop
+  fired 3 executions, one per imported version). `scripts/import-workflows.sh` now deactivates via the API before
+  importing; if duplicates already exist, `docker compose restart n8n` clears them.
+- Form Trigger v2.2+: the URL path must be in `options.path` (top-level `path` is ignored) -> `/form/<path>`;
+  the form only answers while the workflow is active. Submissions post multipart fields `field-0..n` in field order
+  and arrive keyed by field label (`$json.Name`, `$json.Email`, ...).
+- Crypto (hash) and S3 (upload) nodes output items **without** the binary; every consumer of a file branches
+  directly off the Read node. Branch execution order follows node position (v1 order), not connection order.
+- `import:workflow --separate` on a batch where two workflows introduce the same NEW tag fails with
+  "duplicate key value violates unique constraint" (tag_entity.name); the import script now imports one file per call.
+- After `docker compose restart n8n` wait for `/healthz` **and** ~10 s more before importing/running the CLI,
+  otherwise imports fail half-way (workflows missing, "does not exist").
+- Folders without a README yet are not republished by the import script (no `autopublish` to read): pass
+  `--publish` while developing.
+
+## Learned while shipping P04 / D03 (2026-09-07)
+
+- In a Code node placed after a loop/cycle, `$('Node').all()` returns only the **latest run** of that node. To count
+  across every turn walk the run index: `for (let r = 0; ; r++) { try { items = $('Node').all(0, r) } catch { break } ... }`.
+- A sub-workflow's first Execute Workflow call in an execution costs ~650 ms (cold start); later calls ~150 ms.
+  Do not design timing-sensitive demos around "the request happens right after the gate says go".
+- Fixed-window gate (P04) vs a server with a **sliding** window (mock-api `/ratelimited`): five gated calls late in
+  one window plus five early in the next still trip the server. Deterministic zero-429 demo = gate at half the
+  server quota (`limit: 2` per 10 s against 5 per 10 s), plus an 11 s drain after any ungated burst.
+- Redis node `incr` accepts expressions for both `key` and `ttl` (`expire: true`); the key is created with the
+  TTL on every call, so a fixed-window counter needs `ttl = window + 1`.
+- HTML node v1.2 `extractHtmlContent` with `returnValue: attribute` + `attribute: data-sku` and `returnArray: true`
+  returns one parallel array per selector (zip them in a Code node). `#catalog` with `returnArray: false` gives a
+  single string. Source: HTTP Request `responseFormat: text` -> `{data: "<html>"}` -> `sourceData: json`, `dataPropertyName: data`.
+- Merge v3 `numberInputs: 3` works; the Sort node is stable, so ties keep Merge input order (put the source that
+  should win ties on input 0). Remove Duplicates v1.1 keeps the first occurrence.
+- Postgres node select returns `numeric` as a string and `timestamptz` as an ISO string with `.000Z`; normalize
+  timestamps with `new Date(v).toISOString()` before comparing sources.
+- Read/Write File `write` keeps the binary on its output item, so `write_file -> s3_upload` chains without a
+  re-read. Convert to File `csv` prefixes the file with a UTF-8 BOM (harmless for Excel; strip it for strict parsers).
+- Cycles that re-enter a sub-workflow node (Wait -> gate again) work as long as the sub-workflow echoes the fields
+  it needs as input (P04 returns `key`, `limit`, `window_seconds`).

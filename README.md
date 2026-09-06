@@ -69,39 +69,39 @@ current screenshot and passes `scripts/validate.py` (see [CONTRIBUTING.md](CONTR
 
 Generated from each folder's README front-matter. Do not edit between the markers.
 
-<!-- STATS:START -->**8 of 36 workflows shipped · 4 of 8 patterns**<!-- STATS:END -->
+<!-- STATS:START -->**15 of 36 workflows shipped · 6 of 8 patterns**<!-- STATS:END -->
 
 <!-- MATRIX:START -->
-### Triggers (3/7 shipped)
+### Triggers (6/7 shipped)
 
 | ID | Workflow | Difficulty | Patterns | Services | Status |
 |---|---|---|---|---|---|
 | T01 | [Webhook to Database](workflows/T01-webhook-to-database/) | Beginner | [P01](patterns/P01-error-handler/), [P03](patterns/P03-idempotency/) | core | ✅ shipped |
 | T02 | [Scheduled Daily Digest](workflows/T02-daily-digest/) | Beginner | [P01](patterns/P01-error-handler/) | core | ✅ shipped |
 | T03 | [Polling an API Without Webhooks](workflows/T03-api-polling/) | Intermediate | [P01](patterns/P01-error-handler/), [P02](patterns/P02-retry-backoff/) | core | ✅ shipped |
-| T04 | IMAP Email Trigger to Attachment Parser | Intermediate | - | - | 📋 planned |
-| T05 | Form Trigger to Record and Confirmation Email | Beginner | - | - | 📋 planned |
-| T06 | File Watcher: Process on Drop | Beginner | - | - | 📋 planned |
+| T04 | [IMAP Email Trigger to Attachment Parser](workflows/T04-imap-attachment-parser/) | Intermediate | [P01](patterns/P01-error-handler/) | core | ✅ shipped |
+| T05 | [Form Trigger to Record and Confirmation Email](workflows/T05-form-to-record/) | Beginner | [P01](patterns/P01-error-handler/), [P06](patterns/P06-testing/) | core | ✅ shipped |
+| T06 | [File Watcher: Process on Drop](workflows/T06-file-watcher/) | Beginner | [P01](patterns/P01-error-handler/) | core | ✅ shipped |
 | T07 | Telegram Chat Trigger to Command Router | Intermediate | - | - | 📋 planned |
 
-### Data & ETL (1/5 shipped)
+### Data & ETL (2/5 shipped)
 
 | ID | Workflow | Difficulty | Patterns | Services | Status |
 |---|---|---|---|---|---|
 | D01 | [CSV/XLSX Import with Row-level Validation](workflows/D01-csv-import-validation/) | Intermediate | [P01](patterns/P01-error-handler/) | core | ✅ shipped |
 | D02 | Web Scrape to Structured JSON | Intermediate | - | - | 📋 planned |
-| D03 | Multi-source API Aggregation | Advanced | - | - | 📋 planned |
+| D03 | [Multi-source API Aggregation](workflows/D03-multi-source-aggregation/) | Intermediate | [P01](patterns/P01-error-handler/), [P02](patterns/P02-retry-backoff/), [P04](patterns/P04-rate-limiting/) | core | ✅ shipped |
 | D04 | Incremental Sync with Upsert and Dedupe | Advanced | - | - | 📋 planned |
 | D05 | Scheduled DB Dump to MinIO with Rotation | Intermediate | - | - | 📋 planned |
 
-### Monitoring (0/5 shipped)
+### Monitoring (2/5 shipped)
 
 | ID | Workflow | Difficulty | Patterns | Services | Status |
 |---|---|---|---|---|---|
-| M01 | Uptime Monitor with Escalation | Intermediate | - | - | 📋 planned |
+| M01 | [Uptime Monitor with Escalation](workflows/M01-uptime-monitor/) | Intermediate | [P01](patterns/P01-error-handler/), [P08](patterns/P08-observability/) | core | ✅ shipped |
 | M02 | GitHub Events to Chat Notification | Beginner | - | - | 📋 planned |
-| M03 | RSS Keyword-filtered Digest | Beginner | - | - | 📋 planned |
-| M04 | DB Threshold Alert | Beginner | - | - | 📋 planned |
+| M03 | [RSS Keyword-filtered Digest](workflows/M03-rss-keyword-digest/) | Beginner | [P01](patterns/P01-error-handler/) | core | ✅ shipped |
+| M04 | [DB Threshold Alert](workflows/M04-db-threshold-alert/) | Beginner | - | - | 📋 planned |
 | M05 | Price / Exchange-rate Watcher | Intermediate | - | - | 📋 planned |
 
 ### Documents (4/4 shipped)
@@ -133,7 +133,7 @@ Generated from each folder's README front-matter. Do not edit between the marker
 | B03 | Receipt Image to OCR to Sheet to Monthly Rollup | Intermediate | - | - | 📋 planned |
 | B04 | Support Inbox Triage, Assign and SLA Timer | Advanced | - | - | 📋 planned |
 
-### DevOps (0/5 shipped)
+### DevOps (1/5 shipped)
 
 | ID | Workflow | Difficulty | Patterns | Services | Status |
 |---|---|---|---|---|---|
@@ -141,7 +141,7 @@ Generated from each folder's README front-matter. Do not edit between the marker
 | O02 | Actions: Auto-changelog and Release Tagging | Beginner | - | - | 📋 planned |
 | O03 | Issue Triage Bot: Label, Assign, Stale-close | Intermediate | - | - | 📋 planned |
 | O04 | n8n to Git: Nightly Workflow Export | Intermediate | - | - | 📋 planned |
-| O05 | Execution Logs to Postgres to Metabase | Intermediate | - | - | 📋 planned |
+| O05 | [Execution Logs to Postgres to Metabase](workflows/O05-execution-logs-metabase/) | Intermediate | [P01](patterns/P01-error-handler/), [P08](patterns/P08-observability/) | core, observability | ✅ shipped |
 <!-- MATRIX:END -->
 
 ## Production patterns
@@ -151,14 +151,14 @@ Each pattern documents a failure story, the rule, its n8n implementation, the tr
 <!-- PATTERNS:START -->
 | ID | Pattern | Used by | Status |
 |---|---|---|---|
-| P01 | [Global Error Handler](patterns/P01-error-handler/) | [D01](workflows/D01-csv-import-validation/), [R01](workflows/R01-pdf-invoice/), [R02](workflows/R02-bulk-certificates/), [R03](workflows/R03-arabic-rtl-report/), [R04](workflows/R04-pdf-to-dataset/), [T01](workflows/T01-webhook-to-database/), [T02](workflows/T02-daily-digest/), [T03](workflows/T03-api-polling/) | ✅ shipped |
-| P02 | [Retry with Exponential Backoff](patterns/P02-retry-backoff/) | [T03](workflows/T03-api-polling/) | ✅ shipped |
+| P01 | [Global Error Handler](patterns/P01-error-handler/) | [D01](workflows/D01-csv-import-validation/), [D03](workflows/D03-multi-source-aggregation/), [M01](workflows/M01-uptime-monitor/), [M03](workflows/M03-rss-keyword-digest/), [O05](workflows/O05-execution-logs-metabase/), [R01](workflows/R01-pdf-invoice/), [R02](workflows/R02-bulk-certificates/), [R03](workflows/R03-arabic-rtl-report/), [R04](workflows/R04-pdf-to-dataset/), [T01](workflows/T01-webhook-to-database/), [T02](workflows/T02-daily-digest/), [T03](workflows/T03-api-polling/), [T04](workflows/T04-imap-attachment-parser/), [T05](workflows/T05-form-to-record/), [T06](workflows/T06-file-watcher/) | ✅ shipped |
+| P02 | [Retry with Exponential Backoff](patterns/P02-retry-backoff/) | [D03](workflows/D03-multi-source-aggregation/), [T03](workflows/T03-api-polling/) | ✅ shipped |
 | P03 | [Idempotency](patterns/P03-idempotency/) | [T01](workflows/T01-webhook-to-database/) | ✅ shipped |
-| P04 | Rate Limiting and Batching | - | 📋 planned |
+| P04 | [Rate Limiting and Batching](patterns/P04-rate-limiting/) | [D03](workflows/D03-multi-source-aggregation/) | ✅ shipped |
 | P05 | Sub-workflow Modularity | - | 📋 planned |
-| P06 | [Testing and Mock Payloads](patterns/P06-testing/) | - | ✅ shipped |
+| P06 | [Testing and Mock Payloads](patterns/P06-testing/) | [T05](workflows/T05-form-to-record/) | ✅ shipped |
 | P07 | Secrets in a Public Repo | - | 📋 planned |
-| P08 | Observability | - | 📋 planned |
+| P08 | [Observability](patterns/P08-observability/) | [M01](workflows/M01-uptime-monitor/), [O05](workflows/O05-execution-logs-metabase/) | ✅ shipped |
 <!-- PATTERNS:END -->
 
 ## Profiles

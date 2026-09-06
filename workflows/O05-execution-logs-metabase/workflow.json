@@ -1,0 +1,603 @@
+{
+  "name": "O05 - Execution Logs to Postgres to Metabase",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 15
+            }
+          ]
+        }
+      },
+      "id": "2290be83-b514-5aa1-9c39-c87efb905777",
+      "name": "Every 15 minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "d555b757-d213-5a94-b880-b48a4e390421",
+      "name": "Run once (manual / CLI)",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c64c3d53-d894-51a3-8f8c-e2d9e09d665c",
+              "name": "started_at",
+              "value": "={{ $now.toISO() }}",
+              "type": "string"
+            },
+            {
+              "id": "07b2806c-1b24-51c1-84f5-6d14fa918481",
+              "name": "cursor_key",
+              "value": "o05:last_sync",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "2bc65e36-dde7-5631-b6dc-0d5fdd50e468",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        260,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "create unique index if not exists execution_log_execution_id_uidx\n  on execution_log (execution_id)\n  where execution_id is not null",
+        "options": {}
+      },
+      "id": "5fc413e1-f1dd-53de-93b9-f207e39826d4",
+      "name": "Ensure unique index",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        520,
+        0
+      ],
+      "notes": "create unique index if not exists execution_log_execution_id_uidx (idempotent DDL)",
+      "notesInFlow": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "alwaysOutputData": true,
+      "executeOnce": true,
+      "credentials": {
+        "postgres": {
+          "id": "ALcredPostgresDm",
+          "name": "Postgres - demo"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "key": "={{ $('Config').item.json.cursor_key }}",
+        "propertyName": "last_sync",
+        "keyType": "automatic",
+        "options": {}
+      },
+      "id": "0b0b162a-002b-5bee-bbbc-d354ca79a3da",
+      "name": "Read last sync",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        780,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 500,
+      "credentials": {
+        "redis": {
+          "id": "ALcredRedisLocal",
+          "name": "Redis - local"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "execution",
+        "operation": "getAll",
+        "returnAll": false,
+        "limit": 250,
+        "filters": {},
+        "options": {
+          "activeWorkflows": false
+        }
+      },
+      "id": "fa6f36c4-9c1e-5220-8d8e-e510e34cf5f3",
+      "name": "Fetch executions",
+      "type": "n8n-nodes-base.n8n",
+      "typeVersion": 1,
+      "position": [
+        1040,
+        0
+      ],
+      "notes": "Public API GET /executions (newest 250, no node data). Needs credential 'n8n API - local'.",
+      "notesInFlow": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "alwaysOutputData": true,
+      "credentials": {
+        "n8nApi": {
+          "id": "ALcredN8nApiLocl",
+          "name": "n8n API - local"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "workflow",
+        "operation": "getAll",
+        "returnAll": true,
+        "filters": {
+          "excludePinnedData": true
+        }
+      },
+      "id": "697b041a-2f33-52f3-bc1a-4a268f381747",
+      "name": "Fetch workflow names",
+      "type": "n8n-nodes-base.n8n",
+      "typeVersion": 1,
+      "position": [
+        1300,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "alwaysOutputData": true,
+      "executeOnce": true,
+      "credentials": {
+        "n8nApi": {
+          "id": "ALcredN8nApiLocl",
+          "name": "n8n API - local"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Inputs: the workflow list (this node's input), the executions list, the Redis cursor.\nconst names = {};\nfor (const w of $input.all()) if (w.json && w.json.id) names[w.json.id] = w.json.name;\nconst executions = $('Fetch executions').all().map(i => i.json).filter(e => e && e.id);\nconst cursorRaw = $('Read last sync').first().json.last_sync;\nconst cursor = cursorRaw ? new Date(cursorRaw) : new Date('1970-01-01T00:00:00Z');\nconst started_at_run = $('Config').first().json.started_at;\n\n// n8n status -> our vocabulary. Unfinished runs are skipped and pull the cursor back so the next run sees them.\nconst STATUS = { success: 'success', error: 'error', crashed: 'error', canceled: 'warning' };\nconst rows = [];\nlet maxStarted = null;\nlet oldestUnfinished = null;\nfor (const e of executions) {\n  const started = e.startedAt ? new Date(e.startedAt) : null;\n  if (!started || Number.isNaN(started.getTime())) continue;\n  const status = STATUS[e.status];\n  if (!status || !e.stoppedAt) {                     // running / waiting / new: not final yet\n    if (!oldestUnfinished || started < oldestUnfinished) oldestUnfinished = started;\n    continue;\n  }\n  if (started <= cursor) continue;\n  if (!maxStarted || started > maxStarted) maxStarted = started;\n  const stopped = new Date(e.stoppedAt);\n  rows.push({\n    execution_id: String(e.id),\n    workflow_id: String(e.workflowId || ''),\n    workflow_name: names[e.workflowId] || String(e.workflowId || 'unknown'),\n    status,\n    started_at: started.toISOString(),\n    finished_at: stopped.toISOString(),\n    duration_ms: Math.max(0, stopped.getTime() - started.getTime()),\n    mode: e.mode || null,\n  });\n}\n// Next cursor: just before the oldest unfinished execution (so it is picked up once it ends), else the newest seen.\nlet next = maxStarted || cursor;\nif (oldestUnfinished && oldestUnfinished.getTime() - 1 < next.getTime()) next = new Date(oldestUnfinished.getTime() - 1);\nreturn [{ json: {\n  last_sync: cursor.toISOString(),\n  next_sync: next.toISOString(),\n  fetched: executions.length,\n  candidates: rows.length,\n  rows_json: JSON.stringify(rows),\n  started_at: started_at_run,\n} }];"
+      },
+      "id": "41d2c980-ea70-5234-a587-c3e57780aa1d",
+      "name": "Select new executions",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "with src as (\n  select * from jsonb_to_recordset($1::jsonb)\n    as r(execution_id text, workflow_id text, workflow_name text, status text,\n         started_at timestamptz, finished_at timestamptz, duration_ms int)\n), up as (\n  insert into execution_log (execution_id, workflow_id, workflow_name, status, started_at, finished_at, duration_ms)\n  select execution_id, workflow_id, workflow_name, status, started_at, finished_at, duration_ms from src\n  on conflict (execution_id) where execution_id is not null do update\n     set started_at  = coalesce(execution_log.started_at, excluded.started_at),\n         finished_at = coalesce(execution_log.finished_at, excluded.finished_at),\n         duration_ms = coalesce(execution_log.duration_ms, excluded.duration_ms)\n   where execution_log.started_at is null or execution_log.finished_at is null or execution_log.duration_ms is null\n  returning (xmax = 0) as inserted\n)\nselect count(*) filter (where inserted)::int      as inserted,\n       count(*) filter (where not inserted)::int  as enriched,\n       (select count(*) from src)::int            as candidates\n  from up",
+        "options": {
+          "queryReplacement": "={{ [ $json.rows_json ] }}"
+        }
+      },
+      "id": "554b3bee-34ee-575c-8bdf-2350099a3a65",
+      "name": "Insert new rows",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1820,
+        0
+      ],
+      "notes": "Bulk INSERT ... ON CONFLICT (execution_id): new rows inserted, rows P08/P01 wrote only get missing timing filled.",
+      "notesInFlow": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "postgres": {
+          "id": "ALcredPostgresDm",
+          "name": "Postgres - demo"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "set",
+        "key": "={{ $('Config').first().json.cursor_key }}",
+        "value": "={{ $('Select new executions').first().json.next_sync }}",
+        "keyType": "string"
+      },
+      "id": "59f0f829-5684-5039-999a-854df6ceaa51",
+      "name": "Save last sync",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        2080,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 500,
+      "credentials": {
+        "redis": {
+          "id": "ALcredRedisLocal",
+          "name": "Redis - local"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select workflow_name, status, count(*)::int as runs,\n       round(percentile_cont(0.5) within group (order by duration_ms))::int as p50_ms,\n       round(percentile_cont(0.95) within group (order by duration_ms))::int as p95_ms,\n       max(finished_at) as last_run\nfrom execution_log\nwhere coalesce(started_at, logged_at) > now() - interval '24 hours'\ngroup by workflow_name, status\norder by workflow_name, status",
+        "options": {}
+      },
+      "id": "a0c34b95-32d5-554c-ba37-302c097a0cf0",
+      "name": "Stats last 24 h",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2340,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "alwaysOutputData": true,
+      "executeOnce": true,
+      "credentials": {
+        "postgres": {
+          "id": "ALcredPostgresDm",
+          "name": "Postgres - demo"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const sel = $('Select new executions').first().json;\nconst ins = $('Insert new rows').first().json;\nconst stats = $input.all().map(i => i.json).filter(r => r.workflow_name);\nconst pad = (s, n) => String(s ?? '').padEnd(n).slice(0, n);\nconst lines = [\n  `O05 sync ${new Date().toISOString()}: fetched ${sel.fetched} executions, ${sel.candidates} after cursor ` +\n  `(${sel.last_sync}), inserted ${ins.inserted ?? 0}, enriched ${ins.enriched ?? 0}; next cursor ${sel.next_sync}`,\n  '',\n  'Last 24 h per workflow / status (runs, p50 ms, p95 ms):',\n];\nif (!stats.length) lines.push('  (no rows in the last 24 h)');\nfor (const r of stats) {\n  lines.push(`  ${pad(r.workflow_name, 48)} ${pad(r.status, 8)} ${String(r.runs).padStart(4)} ` +\n             `${String(r.p50_ms ?? '-').padStart(7)} ${String(r.p95_ms ?? '-').padStart(7)}`);\n}\nconst errors = stats.filter(r => r.status === 'error').reduce((a, r) => a + r.runs, 0);\nconst total = stats.reduce((a, r) => a + r.runs, 0);\nlines.push('', `${total} runs in 24 h, ${errors} errors. Dashboard: Metabase http://localhost:3001 (profile observability).`);\nreturn [{ json: {\n  subject: `[Automation Lab] O05 execution log sync: +${ins.inserted ?? 0} rows, ${total} runs / ${errors} errors in 24 h`,\n  body: lines.join('\\n'),\n  inserted: ins.inserted ?? 0, enriched: ins.enriched ?? 0, candidates: sel.candidates, fetched: sel.fetched,\n  runs_24h: total, errors_24h: errors, next_sync: sel.next_sync, started_at: sel.started_at,\n} }];"
+      },
+      "id": "a915ae36-69c4-54aa-97ac-86832a5166ab",
+      "name": "Render summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2600,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "schema": {
+          "__rl": true,
+          "value": "public",
+          "mode": "list"
+        },
+        "table": {
+          "__rl": true,
+          "value": "notifications",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "channel": "log",
+            "target": "metabase",
+            "subject": "={{ $json.subject }}",
+            "body": "={{ $json.body }}",
+            "severity": "info",
+            "sent_at": "={{ $now.toISO() }}"
+          },
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "eee77cc8-0338-50c2-b789-b73b07cb514b",
+      "name": "Record notification",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2860,
+        0
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "postgres": {
+          "id": "ALcredPostgresDm",
+          "name": "Postgres - demo"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "ef46f59d-a998-5d33-921a-e932392c3061",
+              "name": "execution_id",
+              "value": "={{ $execution.id }}",
+              "type": "string"
+            },
+            {
+              "id": "af55778a-42a1-5e77-b76d-ecd6fd853d95",
+              "name": "workflow_id",
+              "value": "={{ $workflow.id }}",
+              "type": "string"
+            },
+            {
+              "id": "8f05a35a-5a51-5f81-8d2f-dc3a8b5957f4",
+              "name": "workflow_name",
+              "value": "={{ $workflow.name }}",
+              "type": "string"
+            },
+            {
+              "id": "1d22baa8-32ff-5d7a-a0b6-642cca667953",
+              "name": "status",
+              "value": "success",
+              "type": "string"
+            },
+            {
+              "id": "ba2a3084-09d2-580a-85b2-5ca142fa8a57",
+              "name": "started_at",
+              "value": "={{ $('Config').first().json.started_at }}",
+              "type": "string"
+            },
+            {
+              "id": "e01db803-60ec-5d74-b7f8-d1739898f0c1",
+              "name": "notes",
+              "value": "={{ 'synced ' + $('Render summary').first().json.inserted + ' new executions (' + $('Render summary').first().json.candidates + ' candidates), ' + $('Render summary').first().json.runs_24h + ' runs / ' + $('Render summary').first().json.errors_24h + ' errors in 24 h' }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "ff1c83b0-0eb4-5dd9-afa6-63afd7002d37",
+      "name": "Log input",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        3120,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "ALP08Observabili",
+          "mode": "id",
+          "cachedResultName": "P08 - Log execution"
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "86c5fab1-89df-5289-a508-94a7a58c1d96",
+      "name": "Log execution (P08)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1,
+      "position": [
+        3380,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## O05 - Execution logs -> Postgres -> Metabase\nEvery 15 min: Redis cursor `o05:last_sync` -> n8n public API (`n8n API - local`) -> new finished executions -> `execution_log` (`ON CONFLICT` on the unique index this workflow creates) -> cursor -> 24 h stats (p50/p95) -> `notifications` (channel `log`) -> P08 logs this run.\n\nStatus map: success->success, error/crashed->error, canceled->warning, running/waiting skipped. Dashboard: `docker compose --profile observability up -d`, http://localhost:3001 (see README + test/metabase-queries.sql).",
+        "height": 250,
+        "width": 720,
+        "color": 4
+      },
+      "id": "4e5a2730-6797-5401-8625-d18c9f5c4d14",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -40,
+        -330
+      ]
+    }
+  ],
+  "connections": {
+    "Every 15 minutes": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "Ensure unique index",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ensure unique index": {
+      "main": [
+        [
+          {
+            "node": "Read last sync",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read last sync": {
+      "main": [
+        [
+          {
+            "node": "Fetch executions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch executions": {
+      "main": [
+        [
+          {
+            "node": "Fetch workflow names",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch workflow names": {
+      "main": [
+        [
+          {
+            "node": "Select new executions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Select new executions": {
+      "main": [
+        [
+          {
+            "node": "Insert new rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert new rows": {
+      "main": [
+        [
+          {
+            "node": "Save last sync",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save last sync": {
+      "main": [
+        [
+          {
+            "node": "Stats last 24 h",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Stats last 24 h": {
+      "main": [
+        [
+          {
+            "node": "Render summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Render summary": {
+      "main": [
+        [
+          {
+            "node": "Record notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record notification": {
+      "main": [
+        [
+          {
+            "node": "Log input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log input": {
+      "main": [
+        [
+          {
+            "node": "Log execution (P08)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run once (manual / CLI)": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Africa/Tripoli",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "ALP01ErrorHandle"
+  },
+  "pinData": {},
+  "versionId": "081a5329-3721-5ddb-9e74-8dd6f95727d2",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "description": "Backfills demo.execution_log from the n8n public API every 15 minutes and writes a 24 h stats summary; Metabase charts the table."
+  },
+  "id": "ALO05ExecutionLo",
+  "tags": [
+    {
+      "name": "automation-lab"
+    },
+    {
+      "name": "DevOps"
+    }
+  ]
+}

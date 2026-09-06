@@ -1,0 +1,391 @@
+{
+  "name": "P04 - P04 harness (test)",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "3b2e5208-4dc2-5205-b8fc-a636de3d0021",
+      "name": "Start",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return Array.from({ length: 8 }, (_, i) => ({ json: { n: i + 1 } }));"
+      },
+      "id": "ad4b455f-f65b-5d33-8d37-6d0419b8b7d3",
+      "name": "Burst of 8 (no gate)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        260,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "http://mock-api:8080/ratelimited",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          },
+          "timeout": 5000
+        }
+      },
+      "id": "97d57a4b-5e7f-5ff0-be28-3677db51ff71",
+      "name": "GET /ratelimited (no gate)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        520,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const rs = $input.all().map(i => i.json);\nreturn [{ json: {\n  ungated_requests: rs.length,\n  ungated_ok: rs.filter(r => r.statusCode === 200).length,\n  ungated_429: rs.filter(r => r.statusCode === 429).length,\n}}];"
+      },
+      "id": "e29d1a85-4602-5605-abe2-3e0f5069a3b8",
+      "name": "Count 429s (no gate)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        780,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "amount": 11,
+        "unit": "seconds"
+      },
+      "id": "5cab0b5b-bd9b-5eb8-a908-a3a6b52d8e90",
+      "name": "Let the server bucket drain",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1040,
+        0
+      ],
+      "webhookId": "6b7e89ca-b246-57bf-af6a-18d8b7e0445c"
+    },
+    {
+      "parameters": {
+        "jsCode": "return Array.from({ length: 8 }, (_, i) => ({ json: { n: i + 1, key: 'harness', limit: 2, window_seconds: 10 } }));"
+      },
+      "id": "30e416ae-2411-5cef-a1a6-0098270411c1",
+      "name": "8 gated requests",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1300,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "id": "fc73557d-6391-5bae-aa8f-b08530146280",
+      "name": "One at a time",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        1560,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "ALP04RateLimitin",
+          "mode": "id",
+          "cachedResultName": "P04 - Rate limit gate"
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "c819ce3b-7222-5dfd-b046-9995c52e7b4a",
+      "name": "Rate limit gate (P04)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1,
+      "position": [
+        1820,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "22b89339-c806-5f02-881f-ddba8bc2181e",
+              "leftValue": "={{ $json.allowed }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "aa1143f3-e38f-5a60-9459-69a3b14dac73",
+      "name": "Allowed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2080,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "amount": "={{ ($json.retry_after_ms + 250) / 1000 }}",
+        "unit": "seconds"
+      },
+      "id": "248fc84f-78cc-523c-a744-a8191b911fed",
+      "name": "Wait for next window",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        2340,
+        240
+      ],
+      "webhookId": "05823ad7-8d17-5611-aef9-18a000502259"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "http://mock-api:8080/ratelimited",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          },
+          "timeout": 5000
+        }
+      },
+      "id": "d9886a70-0f2d-515d-8c09-b5794bc60025",
+      "name": "GET /ratelimited (gated)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2340,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const gated = $input.all().map(i => i.json);\nconst raw = $('Count 429s (no gate)').first().json;\nconst gated_429 = gated.filter(r => r.statusCode === 429).length;\n// $('Node').all() after a loop only returns the latest run; walk the run indexes to count every throttle.\nlet throttled = 0;\nfor (let r = 0; r < 100; r++) {\n  let items;\n  try { items = $('Rate limit gate (P04)').all(0, r); } catch (e) { break; }\n  if (!items || !items.length) break;\n  throttled += items.filter(i => i.json.allowed === false).length;\n}\nreturn [{ json: {\n  ungated: { requests: raw.ungated_requests, ok: raw.ungated_ok, status_429: raw.ungated_429 },\n  gated: { requests: gated.length, ok: gated.filter(r => r.statusCode === 200).length, status_429: gated_429,\n           throttled_by_gate: throttled },\n  pass: raw.ungated_429 > 0 && gated_429 === 0,\n  response: `without gate: ${raw.ungated_429}/${raw.ungated_requests} got 429; with gate: ${gated_429}/${gated.length} got 429`,\n}}];"
+      },
+      "id": "394afb3f-3ea2-511d-9314-7272b2c3ebbf",
+      "name": "Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1820,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## P04 harness\nPhase 1: 8 parallel requests to `/ratelimited` (5 per 10 s per client) -> expect 3 x 429.\nPhase 2: same 8 requests one at a time through the gate (`key=harness`, **2 per 10 s** - half the server quota because the server's window slides); every 3rd request is throttled, waits for the next window, asks again -> expect 0 x 429 and 3 throttles.",
+        "height": 190,
+        "width": 620,
+        "color": 4
+      },
+      "id": "d100c720-a6b0-595f-84d7-adb2178a4931",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -40,
+        -260
+      ]
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Burst of 8 (no gate)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Burst of 8 (no gate)": {
+      "main": [
+        [
+          {
+            "node": "GET /ratelimited (no gate)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GET /ratelimited (no gate)": {
+      "main": [
+        [
+          {
+            "node": "Count 429s (no gate)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Count 429s (no gate)": {
+      "main": [
+        [
+          {
+            "node": "Let the server bucket drain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Let the server bucket drain": {
+      "main": [
+        [
+          {
+            "node": "8 gated requests",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "8 gated requests": {
+      "main": [
+        [
+          {
+            "node": "One at a time",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "One at a time": {
+      "main": [
+        [
+          {
+            "node": "Report",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Rate limit gate (P04)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rate limit gate (P04)": {
+      "main": [
+        [
+          {
+            "node": "Allowed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Allowed?": {
+      "main": [
+        [
+          {
+            "node": "GET /ratelimited (gated)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait for next window",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait for next window": {
+      "main": [
+        [
+          {
+            "node": "Rate limit gate (P04)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GET /ratelimited (gated)": {
+      "main": [
+        [
+          {
+            "node": "One at a time",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Africa/Tripoli",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "ALP01ErrorHandle"
+  },
+  "pinData": {},
+  "versionId": "35c1cdf7-162e-561d-90ca-125d2e1900a9",
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "id": "ALP04Harness0000",
+  "tags": [
+    {
+      "name": "automation-lab"
+    },
+    {
+      "name": "test"
+    }
+  ]
+}

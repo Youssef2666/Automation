@@ -1,0 +1,213 @@
+{
+  "name": "P04 - Rate limit gate",
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "id": "a39b956c-6192-51c1-895e-389f61876e2d",
+      "name": "When called by another workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "50e23940-e107-5204-80d7-15e75ac52f4c",
+              "leftValue": "={{ String($json.key ?? '') }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "9340a17e-99d0-55ca-8830-6994f6015e79",
+      "name": "Has key?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        260,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "errorMessage": "P04 rate limit gate: input item needs a non-empty key"
+      },
+      "id": "3882f51c-c936-50ea-9904-67e71ae132c3",
+      "name": "Missing key",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        520,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// One call = one item. Defaults: 5 requests per 10 s window. The window index is aligned to the epoch, so every\n// worker that shares the key also shares the same window boundaries.\nconst j = $json;\nconst key = String(j.key).trim();\nconst limit = Number(j.limit) > 0 ? Math.floor(Number(j.limit)) : 5;\nconst window_seconds = Number(j.window_seconds) > 0 ? Math.floor(Number(j.window_seconds)) : 10;\nconst now = Date.now();\nconst window_index = Math.floor(now / 1000 / window_seconds);\nreturn { key, limit, window_seconds, window_index,\n         window_key: `rl:${key}:${window_index}`,\n         window_end_ms: (window_index + 1) * window_seconds * 1000,\n         ttl_seconds: window_seconds + 1 };",
+        "mode": "runOnceForEachItem"
+      },
+      "id": "96dbc639-c7da-5fd0-9015-1e8951beea33",
+      "name": "Normalize input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        520,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "incr",
+        "key": "={{ $json.window_key }}",
+        "expire": true,
+        "ttl": "={{ $json.ttl_seconds }}"
+      },
+      "id": "129a1e10-958d-50e3-9e87-61e45e750110",
+      "name": "Count in window (INCR + TTL)",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        780,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 500,
+      "credentials": {
+        "redis": {
+          "id": "ALcredRedisLocal",
+          "name": "Redis - local"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Redis INCR outputs { \"<window_key>\": <count> }; the normalized input is one item, so .first() is safe.\nconst s = $('Normalize input').first().json;\nconst count = Number(Object.values($input.first().json)[0]);\nconst allowed = count <= s.limit;\nconst remaining = Math.max(0, s.limit - count);\nconst retry_after_ms = allowed ? 0 : Math.max(0, s.window_end_ms - Date.now());\nreturn [{ json: {\n  ok: true, allowed, count, limit: s.limit, remaining, retry_after_ms,\n  window_key: s.window_key, window_seconds: s.window_seconds, key: s.key,\n  response: allowed\n    ? `allowed (${count}/${s.limit} in window, ${remaining} left)`\n    : `throttled (${count}/${s.limit}); next window in ${retry_after_ms} ms`,\n}}];"
+      },
+      "id": "93d790f4-0052-56e5-850f-7b30d0af619b",
+      "name": "Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1040,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## P04 - Rate limit gate\nCall with `{key, limit?=5, window_seconds?=10}` **before** each outbound request.\n\n`INCR rl:<key>:<floor(now/window)>` (TTL window+1 s): count <= limit -> `allowed: true`; otherwise `retry_after_ms` = time until the next window. Returns `{ok, allowed, count, limit, remaining, retry_after_ms, window_key, response}` and never throws.\n\nCaller: If allowed -> request; else Wait `retry_after_ms` -> ask the gate again. Every worker that shares the key shares the budget.",
+        "height": 260,
+        "width": 640,
+        "color": 4
+      },
+      "id": "b47f396f-2d9a-573f-a014-a63cbd8c96a5",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -40,
+        -330
+      ]
+    }
+  ],
+  "connections": {
+    "When called by another workflow": {
+      "main": [
+        [
+          {
+            "node": "Has key?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has key?": {
+      "main": [
+        [
+          {
+            "node": "Normalize input",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Missing key",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize input": {
+      "main": [
+        [
+          {
+            "node": "Count in window (INCR + TTL)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Count in window (INCR + TTL)": {
+      "main": [
+        [
+          {
+            "node": "Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Africa/Tripoli",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "ALP01ErrorHandle"
+  },
+  "pinData": {},
+  "versionId": "c59c658d-310d-58fd-a0d0-5af4580a407e",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "description": "Shared fixed-window rate limiter (Redis INCR per key and window); tells the caller whether to go now or how long to wait."
+  },
+  "id": "ALP04RateLimitin",
+  "tags": [
+    {
+      "name": "automation-lab"
+    },
+    {
+      "name": "pattern"
+    },
+    {
+      "name": "P04"
+    }
+  ]
+}

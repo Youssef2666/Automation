@@ -1,0 +1,9 @@
+{
+  "_comment": "The item a caller passes to the Execute Workflow node (values as the caller's Set node produces them).",
+  "execution_id": "412",
+  "workflow_id": "ALT02DailyDigest",
+  "workflow_name": "T02 - Scheduled Daily Digest",
+  "status": "success",
+  "started_at": "2026-09-07T07:00:00.120+02:00",
+  "notes": "digest sent to ops@lab.local (31 orders, 48 open tickets)"
+}

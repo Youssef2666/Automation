@@ -1,0 +1,425 @@
+{
+  "name": "M03 - RSS Keyword-filtered Digest",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 8 * * *"
+            }
+          ]
+        }
+      },
+      "id": "4064b828-b6d4-562c-ae07-5efb8dc1e703",
+      "name": "Every day 08:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "c58086b2-09ea-5aaa-9616-053a6cbc238a",
+      "name": "Run once (manual / CLI)",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "44950849-4a67-5055-9fe0-bed6427ffbff",
+              "name": "feed",
+              "value": "http://mock-api:8080/feed.xml",
+              "type": "string"
+            },
+            {
+              "id": "1df0d8ee-a46a-56c8-8d2f-01f19c2ed17f",
+              "name": "keywords",
+              "value": "automation, n8n, ocr, arabic, webhook",
+              "type": "string"
+            },
+            {
+              "id": "2d552726-ad46-5ea5-b345-45826d3e16de",
+              "name": "report_to",
+              "value": "ops@lab.local",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "cfb7be2c-4adf-529c-8cc2-3864759f2b5f",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        260,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.feed }}",
+        "options": {}
+      },
+      "id": "feb253a2-7ec6-5495-8ae3-dc8f816602b0",
+      "name": "Read feed",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1.1,
+      "position": [
+        520,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "jsCode": "// Keep items whose title or description mentions at least one keyword; annotate with the matches.\nconst keywords = String($('Config').first().json.keywords || '').split(',').map(k => k.trim().toLowerCase()).filter(Boolean);\nconst out = [];\nfor (const it of $input.all()) {\n  const j = it.json;\n  const hay = `${j.title || ''} ${j.contentSnippet || j.content || j.description || ''}`.toLowerCase();\n  const hits = keywords.filter(k => hay.includes(k));\n  if (hits.length) out.push({ json: { guid: j.guid || j.id || j.link, title: j.title, link: j.link,\n                                      published: j.isoDate || j.pubDate || null, matched: hits,\n                                      snippet: String(j.contentSnippet || j.content || '').slice(0, 220) } });\n}\nreturn out;"
+      },
+      "id": "1480217a-b9a6-50a4-b76b-34dc1a7f0e4e",
+      "name": "Keyword filter",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        780,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "removeItemsSeenInPreviousExecutions",
+        "logic": "removeItemsWithAlreadySeenKeyValues",
+        "dedupeValue": "={{ $json.guid }}",
+        "options": {
+          "scope": "workflow",
+          "historySize": 5000
+        }
+      },
+      "id": "5bb73c7d-474f-511d-8855-cdd32990f857",
+      "name": "Only never-sent posts",
+      "type": "n8n-nodes-base.removeDuplicates",
+      "typeVersion": 2,
+      "position": [
+        1040,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "destinationFieldName": "data",
+        "options": {}
+      },
+      "id": "662a5ff8-9165-567f-916d-fd06df1812fc",
+      "name": "Collect matches",
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        1300,
+        0
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "5b469a24-55b1-51f9-83de-1126358adc11",
+              "leftValue": "={{ ($json.data || []).length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "32d0143d-0fa3-533c-8ba3-21c0a230044a",
+      "name": "Anything new?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1560,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.first().json.data || [];\nconst cfg = $('Config').first().json;\nconst li = items.map(i => `<li><a href=\"${i.link}\">${i.title}</a> <small>(${(i.matched || []).join(', ')})</small><br><span style=\"color:#666\">${i.snippet}</span></li>`).join('');\nreturn [{ json: {\n  count: items.length,\n  subject: `[Automation Lab] RSS digest: ${items.length} new post(s) matching ${cfg.keywords}`,\n  html: `<div style=\"font-family:sans-serif\"><h3>${items.length} new post(s)</h3><p>Keywords: <code>${cfg.keywords}</code></p><ul>${li}</ul><p style=\"color:#888\">M03 - only posts not seen in previous runs.</p></div>`,\n  text: items.map(i => `- ${i.title} (${i.link})`).join('\\n'),\n}}];"
+      },
+      "id": "dee8d2ae-08ed-5869-899f-4440b7717e0e",
+      "name": "Render digest",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1820,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "automation-lab@lab.local",
+        "toEmail": "={{ $('Config').item.json.report_to }}",
+        "subject": "={{ $json.subject }}",
+        "options": {},
+        "emailFormat": "html",
+        "html": "={{ $json.html }}"
+      },
+      "id": "fe9b08f1-6ed7-5e10-b293-5714ad336721",
+      "name": "Send digest (Mailpit)",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        2080,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "smtp": {
+          "id": "ALcredSmtpMailpt",
+          "name": "SMTP - Mailpit"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "schema": {
+          "__rl": true,
+          "value": "public",
+          "mode": "list"
+        },
+        "table": {
+          "__rl": true,
+          "value": "notifications",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "channel": "email",
+            "target": "={{ $('Config').item.json.report_to }}",
+            "subject": "={{ $('Render digest').item.json.subject }}",
+            "body": "={{ $('Render digest').item.json.text }}",
+            "severity": "info",
+            "sent_at": "={{ $now.toISO() }}"
+          },
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "ebaa3b58-01cc-575c-8d17-c828ac155123",
+      "name": "Record notification",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2340,
+        0
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "postgres": {
+          "id": "ALcredPostgresDm",
+          "name": "Postgres - demo"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "1cd522fb-d7ce-5f1f-a676-b5c9678f430b",
+      "name": "Nothing new",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1820,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## M03 - RSS keyword digest\n`RSS Read` on the mock feed (25 posts) -> keyword filter -> **Remove Duplicates (previous executions)** keyed by guid, so a post is digested once ever, even across manual runs -> one e-mail with the new matches.\n\nSecond run: nothing new. To reset, clear the node's dedupe history in the editor (Remove Duplicates -> Manage Key Values).",
+        "height": 210,
+        "width": 620,
+        "color": 4
+      },
+      "id": "a3590823-906c-5fe9-aef0-e4f954cd5fbe",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -40,
+        -330
+      ]
+    }
+  ],
+  "connections": {
+    "Every day 08:00": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "Read feed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read feed": {
+      "main": [
+        [
+          {
+            "node": "Keyword filter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Keyword filter": {
+      "main": [
+        [
+          {
+            "node": "Only never-sent posts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Only never-sent posts": {
+      "main": [
+        [
+          {
+            "node": "Collect matches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect matches": {
+      "main": [
+        [
+          {
+            "node": "Anything new?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run once (manual / CLI)": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Anything new?": {
+      "main": [
+        [
+          {
+            "node": "Render digest",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Nothing new",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Render digest": {
+      "main": [
+        [
+          {
+            "node": "Send digest (Mailpit)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send digest (Mailpit)": {
+      "main": [
+        [
+          {
+            "node": "Record notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Africa/Tripoli",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "ALP01ErrorHandle"
+  },
+  "pinData": {},
+  "versionId": "f0e54f90-1281-56e8-8e25-356f6571cf71",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "description": "Reads an RSS feed, keeps posts matching keywords, digests only the ones never sent before."
+  },
+  "id": "ALM03RssKeywordD",
+  "tags": [
+    {
+      "name": "automation-lab"
+    },
+    {
+      "name": "Monitoring"
+    }
+  ]
+}

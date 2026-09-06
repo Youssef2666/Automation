@@ -1,0 +1,208 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Automation Lab Blog (mock)</title>
+    <link>http://mock-api:8080/posts</link>
+    <description>Synthetic posts for RSS digest demos</description>
+    <item>
+      <title>Six months of an automation lab: lessons</title>
+      <link>http://mock-api:8080/posts/25</link>
+      <guid isPermaLink="false">post-25</guid>
+      <pubDate>Sun, 30 Aug 2026 03:00:00 GMT</pubDate>
+      <description>Six months of an automation lab: lessons. A short, practical note from the Automation Lab on automation and retrospective, written for small teams that run everything locally.</description>
+      <category>automation, retrospective</category>
+    </item>
+    <item>
+      <title>Rate limits are a feature</title>
+      <link>http://mock-api:8080/posts/24</link>
+      <guid isPermaLink="false">post-24</guid>
+      <pubDate>Thu, 27 Aug 2026 17:00:00 GMT</pubDate>
+      <description>Rate limits are a feature. A short, practical note from the Automation Lab on patterns and api, written for small teams that run everything locally.</description>
+      <category>patterns, api</category>
+    </item>
+    <item>
+      <title>Error handlers: the pattern every workflow needs</title>
+      <link>http://mock-api:8080/posts/23</link>
+      <guid isPermaLink="false">post-23</guid>
+      <pubDate>Tue, 25 Aug 2026 13:00:00 GMT</pubDate>
+      <description>Error handlers: the pattern every workflow needs. A short, practical note from the Automation Lab on patterns and errors, written for small teams that run everything locally.</description>
+      <category>patterns, errors</category>
+    </item>
+    <item>
+      <title>Export your workflows every night</title>
+      <link>http://mock-api:8080/posts/22</link>
+      <guid isPermaLink="false">post-22</guid>
+      <pubDate>Sun, 23 Aug 2026 08:00:00 GMT</pubDate>
+      <description>Export your workflows every night. A short, practical note from the Automation Lab on devops and git, written for small teams that run everything locally.</description>
+      <category>devops, git</category>
+    </item>
+    <item>
+      <title>Backing up n8n to S3-compatible storage</title>
+      <link>http://mock-api:8080/posts/21</link>
+      <guid isPermaLink="false">post-21</guid>
+      <pubDate>Fri, 21 Aug 2026 01:00:00 GMT</pubDate>
+      <description>Backing up n8n to S3-compatible storage. A short, practical note from the Automation Lab on devops and backup, written for small teams that run everything locally.</description>
+      <category>devops, backup</category>
+    </item>
+    <item>
+      <title>Receipt photos to a monthly expense sheet</title>
+      <link>http://mock-api:8080/posts/20</link>
+      <guid isPermaLink="false">post-20</guid>
+      <pubDate>Tue, 18 Aug 2026 12:00:00 GMT</pubDate>
+      <description>Receipt photos to a monthly expense sheet. A short, practical note from the Automation Lab on ocr and finance, written for small teams that run everything locally.</description>
+      <category>ocr, finance</category>
+    </item>
+    <item>
+      <title>Booking reminders that respect time zones</title>
+      <link>http://mock-api:8080/posts/19</link>
+      <guid isPermaLink="false">post-19</guid>
+      <pubDate>Sun, 16 Aug 2026 10:00:00 GMT</pubDate>
+      <description>Booking reminders that respect time zones. A short, practical note from the Automation Lab on scheduling and email, written for small teams that run everything locally.</description>
+      <category>scheduling, email</category>
+    </item>
+    <item>
+      <title>Lead enrichment without buying a data feed</title>
+      <link>http://mock-api:8080/posts/18</link>
+      <guid isPermaLink="false">post-18</guid>
+      <pubDate>Thu, 13 Aug 2026 18:00:00 GMT</pubDate>
+      <description>Lead enrichment without buying a data feed. A short, practical note from the Automation Lab on sales and integration, written for small teams that run everything locally.</description>
+      <category>sales, integration</category>
+    </item>
+    <item>
+      <title>Repurposing one article into five posts</title>
+      <link>http://mock-api:8080/posts/17</link>
+      <guid isPermaLink="false">post-17</guid>
+      <pubDate>Tue, 11 Aug 2026 18:00:00 GMT</pubDate>
+      <description>Repurposing one article into five posts. A short, practical note from the Automation Lab on content and ai, written for small teams that run everything locally.</description>
+      <category>content, ai</category>
+    </item>
+    <item>
+      <title>Meeting audio to action items</title>
+      <link>http://mock-api:8080/posts/16</link>
+      <guid isPermaLink="false">post-16</guid>
+      <pubDate>Sun, 09 Aug 2026 05:00:00 GMT</pubDate>
+      <description>Meeting audio to action items. A short, practical note from the Automation Lab on ai and whisper, written for small teams that run everything locally.</description>
+      <category>ai, whisper</category>
+    </item>
+    <item>
+      <title>RAG on your own docs with Qdrant and Ollama</title>
+      <link>http://mock-api:8080/posts/15</link>
+      <guid isPermaLink="false">post-15</guid>
+      <pubDate>Fri, 07 Aug 2026 03:00:00 GMT</pubDate>
+      <description>RAG on your own docs with Qdrant and Ollama. A short, practical note from the Automation Lab on ai and rag, written for small teams that run everything locally.</description>
+      <category>ai, rag</category>
+    </item>
+    <item>
+      <title>Local LLMs for ticket triage</title>
+      <link>http://mock-api:8080/posts/14</link>
+      <guid isPermaLink="false">post-14</guid>
+      <pubDate>Tue, 04 Aug 2026 17:00:00 GMT</pubDate>
+      <description>Local LLMs for ticket triage. A short, practical note from the Automation Lab on ai and support, written for small teams that run everything locally.</description>
+      <category>ai, support</category>
+    </item>
+    <item>
+      <title>A bilingual weekly report in one workflow</title>
+      <link>http://mock-api:8080/posts/13</link>
+      <guid isPermaLink="false">post-13</guid>
+      <pubDate>Sun, 02 Aug 2026 15:00:00 GMT</pubDate>
+      <description>A bilingual weekly report in one workflow. A short, practical note from the Automation Lab on documents and arabic, written for small teams that run everything locally.</description>
+      <category>documents, arabic</category>
+    </item>
+    <item>
+      <title>Attendance reports nobody has to build by hand</title>
+      <link>http://mock-api:8080/posts/12</link>
+      <guid isPermaLink="false">post-12</guid>
+      <pubDate>Thu, 30 Jul 2026 23:00:00 GMT</pubDate>
+      <description>Attendance reports nobody has to build by hand. A short, practical note from the Automation Lab on reports and hr, written for small teams that run everything locally.</description>
+      <category>reports, hr</category>
+    </item>
+    <item>
+      <title>Exchange-rate alerts on a budget</title>
+      <link>http://mock-api:8080/posts/11</link>
+      <guid isPermaLink="false">post-11</guid>
+      <pubDate>Tue, 28 Jul 2026 16:00:00 GMT</pubDate>
+      <description>Exchange-rate alerts on a budget. A short, practical note from the Automation Lab on monitoring and finance, written for small teams that run everything locally.</description>
+      <category>monitoring, finance</category>
+    </item>
+    <item>
+      <title>Monitoring your monitors</title>
+      <link>http://mock-api:8080/posts/10</link>
+      <guid isPermaLink="false">post-10</guid>
+      <pubDate>Sun, 26 Jul 2026 12:00:00 GMT</pubDate>
+      <description>Monitoring your monitors. A short, practical note from the Automation Lab on monitoring and observability, written for small teams that run everything locally.</description>
+      <category>monitoring, observability</category>
+    </item>
+    <item>
+      <title>From inbox to ticket: parsing e-mail reliably</title>
+      <link>http://mock-api:8080/posts/9</link>
+      <guid isPermaLink="false">post-9</guid>
+      <pubDate>Fri, 24 Jul 2026 04:00:00 GMT</pubDate>
+      <description>From inbox to ticket: parsing e-mail reliably. A short, practical note from the Automation Lab on email and support, written for small teams that run everything locally.</description>
+      <category>email, support</category>
+    </item>
+    <item>
+      <title>The case for a local mock API</title>
+      <link>http://mock-api:8080/posts/8</link>
+      <guid isPermaLink="false">post-8</guid>
+      <pubDate>Tue, 21 Jul 2026 22:00:00 GMT</pubDate>
+      <description>The case for a local mock API. A short, practical note from the Automation Lab on testing and integration, written for small teams that run everything locally.</description>
+      <category>testing, integration</category>
+    </item>
+    <item>
+      <title>How to test workflows without hitting production</title>
+      <link>http://mock-api:8080/posts/7</link>
+      <guid isPermaLink="false">post-7</guid>
+      <pubDate>Sun, 19 Jul 2026 20:00:00 GMT</pubDate>
+      <description>How to test workflows without hitting production. A short, practical note from the Automation Lab on testing and patterns, written for small teams that run everything locally.</description>
+      <category>testing, patterns</category>
+    </item>
+    <item>
+      <title>Arabic OCR: what actually works offline</title>
+      <link>http://mock-api:8080/posts/6</link>
+      <guid isPermaLink="false">post-6</guid>
+      <pubDate>Fri, 17 Jul 2026 07:00:00 GMT</pubDate>
+      <description>Arabic OCR: what actually works offline. A short, practical note from the Automation Lab on ocr and arabic, written for small teams that run everything locally.</description>
+      <category>ocr, arabic</category>
+    </item>
+    <item>
+      <title>Turning a locked PDF into a spreadsheet</title>
+      <link>http://mock-api:8080/posts/5</link>
+      <guid isPermaLink="false">post-5</guid>
+      <pubDate>Tue, 14 Jul 2026 22:00:00 GMT</pubDate>
+      <description>Turning a locked PDF into a spreadsheet. A short, practical note from the Automation Lab on documents and pdf, written for small teams that run everything locally.</description>
+      <category>documents, pdf</category>
+    </item>
+    <item>
+      <title>A gentle introduction to retries and backoff</title>
+      <link>http://mock-api:8080/posts/4</link>
+      <guid isPermaLink="false">post-4</guid>
+      <pubDate>Sun, 12 Jul 2026 16:00:00 GMT</pubDate>
+      <description>A gentle introduction to retries and backoff. A short, practical note from the Automation Lab on patterns and reliability, written for small teams that run everything locally.</description>
+      <category>patterns, reliability</category>
+    </item>
+    <item>
+      <title>Idempotency keys explained with a coffee shop</title>
+      <link>http://mock-api:8080/posts/3</link>
+      <guid isPermaLink="false">post-3</guid>
+      <pubDate>Fri, 10 Jul 2026 11:00:00 GMT</pubDate>
+      <description>Idempotency keys explained with a coffee shop. A short, practical note from the Automation Lab on patterns and reliability, written for small teams that run everything locally.</description>
+      <category>patterns, reliability</category>
+    </item>
+    <item>
+      <title>Webhooks versus polling: picking the right trigger</title>
+      <link>http://mock-api:8080/posts/2</link>
+      <guid isPermaLink="false">post-2</guid>
+      <pubDate>Wed, 08 Jul 2026 02:00:00 GMT</pubDate>
+      <description>Webhooks versus polling: picking the right trigger. A short, practical note from the Automation Lab on webhooks and integration, written for small teams that run everything locally.</description>
+      <category>webhooks, integration</category>
+    </item>
+    <item>
+      <title>Why small teams automate first</title>
+      <link>http://mock-api:8080/posts/1</link>
+      <guid isPermaLink="false">post-1</guid>
+      <pubDate>Sun, 05 Jul 2026 17:00:00 GMT</pubDate>
+      <description>Why small teams automate first. A short, practical note from the Automation Lab on automation and small business, written for small teams that run everything locally.</description>
+      <category>automation, small-business</category>
+    </item>
+  </channel>
+</rss>

@@ -477,8 +477,10 @@ def form_trigger(wf: Workflow, name: str, path: str, title: str, fields: list[di
                  response: str = "onReceived", button: str = "Submit") -> Node:
     """fields: [{"fieldLabel": "Name", "requiredField": True}, {"fieldLabel": "Email", "fieldType": "email"},
     {"fieldLabel": "Topic", "fieldType": "dropdown", "fieldOptions": {"values": [{"option": "A"}]}}]"""
+    # v2.2+: the URL path lives in options.path (the top-level `path` is only read by versions <= 2.1; when it is
+    # absent the form falls back to the random webhookId). Both are set so the URL is stable: /form/<path>.
     params = {"formTitle": title, "formDescription": description, "formFields": {"values": fields},
-              "responseMode": response, "path": path, "options": {"buttonLabel": button}}
+              "responseMode": response, "path": path, "options": {"buttonLabel": button, "path": path}}
     return wf.add(name, "n8n-nodes-base.formTrigger", 2.2, params, webhookId=uid(wf.id, name, "webhook"))
 
 

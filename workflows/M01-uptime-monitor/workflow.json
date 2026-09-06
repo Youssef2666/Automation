@@ -1,0 +1,535 @@
+{
+  "name": "M01 - Uptime Monitor with Escalation",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 1
+            }
+          ]
+        }
+      },
+      "id": "98062741-4b45-5324-988d-9e23a404717e",
+      "name": "Every minute",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "839a15a2-c58d-5994-bf83-ac274b5d257e",
+      "name": "Run once (manual / CLI)",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Targets are in-network service URLs. `simulated-outage` always fails (mock-api /health/down) to demo escalation.\nconst targets = [\n  { target: 'mock-api',         url: 'http://mock-api:8080/health' },\n  { target: 'n8n',              url: 'http://n8n:5678/healthz' },\n  { target: 'minio',            url: 'http://minio:9000/minio/health/live' },\n  { target: 'simulated-outage', url: 'http://mock-api:8080/health/down' },\n];\nreturn targets.map(t => ({ json: { ...t, started_ms: Date.now() } }));"
+      },
+      "id": "705b327d-caae-578d-aa61-99e25ed5ff51",
+      "name": "Targets",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        260,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.url }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "autodetect"
+            }
+          },
+          "timeout": 5000
+        }
+      },
+      "id": "ccee4d35-0392-5568-b0a3-3c5a63875ff9",
+      "name": "Probe",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        520,
+        0
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Per probe: HTTP output (full response, never error) or the error output (connection refused / timeout).\nconst t = $('Targets').item.json;\nconst r = $json;\nconst failed = r.error !== undefined && r.statusCode === undefined;\nconst status = failed ? null : Number(r.statusCode || 0);\nconst ok = !failed && status >= 200 && status < 400;\nreturn { json: { target: t.target, url: t.url, status_code: status, ok,\n                 latency_ms: Math.max(0, Date.now() - Number(t.started_ms || Date.now())),\n                 error: failed ? String((r.error && r.error.message) || 'request failed') : null,\n                 checked_at: new Date().toISOString() } };",
+        "mode": "runOnceForEachItem"
+      },
+      "id": "8a9d50fa-a01b-5572-82ea-ad46b587b259",
+      "name": "Evaluate probe",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        780,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "schema": {
+          "__rl": true,
+          "value": "public",
+          "mode": "list"
+        },
+        "table": {
+          "__rl": true,
+          "value": "uptime_checks",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "target": "={{ $json.target }}",
+            "url": "={{ $json.url }}",
+            "status_code": "={{ $json.status_code }}",
+            "latency_ms": "={{ $json.latency_ms }}",
+            "ok": "={{ $json.ok }}",
+            "checked_at": "={{ $json.checked_at }}"
+          },
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "47433e6e-6c6d-5e97-917b-41a5c6b4450f",
+      "name": "Insert uptime_checks",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1040,
+        0
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "postgres": {
+          "id": "ALcredPostgresDm",
+          "name": "Postgres - demo"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "destinationFieldName": "data",
+        "options": {}
+      },
+      "id": "a9f4c9af-892a-534f-8640-fdfbb487735c",
+      "name": "Collect probes",
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        1300,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select target, state, failures, since, last_alert_at from uptime_state",
+        "options": {}
+      },
+      "id": "9078fdd8-46cc-5579-89ae-d08f02858039",
+      "name": "Load state",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1560,
+        0
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "ALcredPostgresDm",
+          "name": "Postgres - demo"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Combine this run's probes with the persisted state -> new state per target + whether to alert.\nconst DOWN_AFTER = 3;            // consecutive failures before \"down\"\nconst ALERT_COOLDOWN_MS = 60 * 60 * 1000;\nconst probes = $('Collect probes').first().json.data || [];\nconst state = {};\nfor (const it of $('Load state').all()) state[it.json.target] = it.json;\nconst now = Date.now();\nreturn probes.map(p => {\n  const prev = state[p.target] || { state: 'up', failures: 0, since: null, last_alert_at: null };\n  let failures = p.ok ? 0 : Number(prev.failures || 0) + 1;\n  let next = p.ok ? 'up' : (failures >= DOWN_AFTER ? 'down' : 'warn');\n  const changed = next !== prev.state;\n  const transition = changed ? `${prev.state} -> ${next}` : null;\n  const wantsAlert = (next === 'down' && prev.state !== 'down') || (next === 'up' && prev.state === 'down');\n  const cooled = !prev.last_alert_at || (now - new Date(prev.last_alert_at).getTime()) > ALERT_COOLDOWN_MS;\n  const alert = wantsAlert && cooled;\n  return { json: { ...p, prev_state: prev.state, state: next, failures, transition, alert,\n                   since: changed ? new Date().toISOString() : (prev.since || new Date().toISOString()),\n                   last_alert_at: alert ? new Date().toISOString() : (prev.last_alert_at || null),\n                   severity: next === 'down' ? 'error' : next === 'warn' ? 'warning' : 'info' } };\n});"
+      },
+      "id": "ed0a93ac-e214-5cb7-81c6-da00537db0e5",
+      "name": "Escalation logic",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1820,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "schema": {
+          "__rl": true,
+          "value": "public",
+          "mode": "list"
+        },
+        "table": {
+          "__rl": true,
+          "value": "uptime_state",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "target": "={{ $json.target }}",
+            "state": "={{ $json.state }}",
+            "failures": "={{ $json.failures }}",
+            "since": "={{ $json.since }}",
+            "last_alert_at": "={{ $json.last_alert_at }}"
+          },
+          "matchingColumns": [
+            "target"
+          ],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "cf738bf8-d109-5f0c-80a7-174a3444babf",
+      "name": "Upsert uptime_state",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2080,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "ALcredPostgresDm",
+          "name": "Postgres - demo"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "b9e5c3cb-7e2d-5b29-893d-0e9d761efbfb",
+              "leftValue": "={{ $('Escalation logic').item.json.alert ? 1 : 0 }}",
+              "rightValue": 1,
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "9860f234-1628-59c3-a50e-245d59d14cad",
+      "name": "Alert?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2340,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "automation-lab@lab.local",
+        "toEmail": "ops@lab.local",
+        "subject": "=[Automation Lab] {{ $('Escalation logic').item.json.state.toUpperCase() }}: {{ $('Escalation logic').item.json.target }} ({{ $('Escalation logic').item.json.transition }})",
+        "options": {},
+        "emailFormat": "html",
+        "html": "=<p><b>{{ $('Escalation logic').item.json.target }}</b> is now <b>{{ $('Escalation logic').item.json.state }}</b> ({{ $('Escalation logic').item.json.transition }}) after {{ $('Escalation logic').item.json.failures }} consecutive failure(s).</p><p>URL: {{ $('Escalation logic').item.json.url }}<br>Last status: {{ $('Escalation logic').item.json.status_code ?? $('Escalation logic').item.json.error }}</p><p>Next alert for this target no sooner than one hour from now.</p>"
+      },
+      "id": "734a4ff4-f0cc-5516-ac01-d3da72f61a98",
+      "name": "Alert e-mail (Mailpit)",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        2600,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "smtp": {
+          "id": "ALcredSmtpMailpt",
+          "name": "SMTP - Mailpit"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "schema": {
+          "__rl": true,
+          "value": "public",
+          "mode": "list"
+        },
+        "table": {
+          "__rl": true,
+          "value": "notifications",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "channel": "email",
+            "target": "ops@lab.local",
+            "subject": "={{ $('Escalation logic').item.json.state.toUpperCase() }}: {{ $('Escalation logic').item.json.target }}",
+            "body": "={{ $('Escalation logic').item.json.transition }}",
+            "severity": "={{ $('Escalation logic').item.json.severity }}",
+            "sent_at": "={{ $now.toISO() }}"
+          },
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "94d10006-9858-5cdf-82d1-624fb7aeab44",
+      "name": "Record notification",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2860,
+        0
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "postgres": {
+          "id": "ALcredPostgresDm",
+          "name": "Postgres - demo"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "b05a4b6f-197a-512f-8163-87b612a0a11f",
+      "name": "No transition",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        2600,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## M01 - Uptime monitor with escalation\nProbes 4 targets every minute (one is a **simulated outage**). Every probe is a row in `uptime_checks`; `uptime_state` holds the state machine per target: up -> warn (1st failure) -> down (3 consecutive) -> up on recovery.\n\nAlerts only on transitions to down / back to up, and at most once per hour per target (no alert storms). Latency is measured around the HTTP node (approximate).",
+        "height": 230,
+        "width": 640,
+        "color": 4
+      },
+      "id": "0831f787-7004-5630-9bc8-32c0cfc4b77b",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -40,
+        -330
+      ]
+    }
+  ],
+  "connections": {
+    "Every minute": {
+      "main": [
+        [
+          {
+            "node": "Targets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Targets": {
+      "main": [
+        [
+          {
+            "node": "Probe",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run once (manual / CLI)": {
+      "main": [
+        [
+          {
+            "node": "Targets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Probe": {
+      "main": [
+        [
+          {
+            "node": "Evaluate probe",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Evaluate probe",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evaluate probe": {
+      "main": [
+        [
+          {
+            "node": "Insert uptime_checks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert uptime_checks": {
+      "main": [
+        [
+          {
+            "node": "Collect probes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect probes": {
+      "main": [
+        [
+          {
+            "node": "Load state",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load state": {
+      "main": [
+        [
+          {
+            "node": "Escalation logic",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Escalation logic": {
+      "main": [
+        [
+          {
+            "node": "Upsert uptime_state",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upsert uptime_state": {
+      "main": [
+        [
+          {
+            "node": "Alert?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Alert?": {
+      "main": [
+        [
+          {
+            "node": "Alert e-mail (Mailpit)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No transition",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Alert e-mail (Mailpit)": {
+      "main": [
+        [
+          {
+            "node": "Record notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Africa/Tripoli",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "ALP01ErrorHandle"
+  },
+  "pinData": {},
+  "versionId": "cc90761f-4160-56a9-a69a-d923d78a233f",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "description": "Probes services every minute, keeps per-target state, escalates to down after 3 failures, alerts once per hour."
+  },
+  "id": "ALM01UptimeMonit",
+  "tags": [
+    {
+      "name": "automation-lab"
+    },
+    {
+      "name": "Monitoring"
+    }
+  ]
+}

@@ -1,0 +1,48 @@
+{
+  "_comment": "Captured with `curl 'localhost:8080/products?_page=1&_limit=2'` (json-server collection). The Postgres `products` table has the same columns with numeric/timestamptz types.",
+  "request": "GET http://mock-api:8080/products?_page=1&_limit=100&_sort=sku&_order=asc",
+  "rows": [
+    {
+      "id": 1,
+      "sku": "SKU-0001",
+      "name": "Classic Desk Lamp",
+      "category": "Office",
+      "price": 413.25,
+      "currency": "USD",
+      "stock": 10,
+      "updated_at": "2026-08-30T00:48:38Z"
+    },
+    {
+      "id": 2,
+      "sku": "SKU-0002",
+      "name": "Eco Monitor Stand",
+      "category": "Office",
+      "price": 94.9,
+      "currency": "USD",
+      "stock": 114,
+      "updated_at": "2026-08-30T02:43:14Z"
+    }
+  ],
+  "normalized": [
+    {
+      "sku": "SKU-0001",
+      "name": "Classic Desk Lamp",
+      "category": "Office",
+      "price_usd": 413.25,
+      "stock": 10,
+      "source": "mock-api-products",
+      "seen_at": "<run time ISO>",
+      "updated_at": "2026-08-30T00:48:38.000Z"
+    },
+    {
+      "sku": "SKU-0002",
+      "name": "Eco Monitor Stand",
+      "category": "Office",
+      "price_usd": 94.9,
+      "stock": 114,
+      "source": "mock-api-products",
+      "seen_at": "<run time ISO>",
+      "updated_at": "2026-08-30T02:43:14.000Z"
+    }
+  ]
+}

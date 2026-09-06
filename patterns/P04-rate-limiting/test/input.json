@@ -1,0 +1,5 @@
+{
+  "key": "harness",
+  "limit": 5,
+  "window_seconds": 10
+}

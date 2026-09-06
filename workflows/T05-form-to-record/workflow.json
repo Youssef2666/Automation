@@ -1,0 +1,295 @@
+{
+  "name": "T05 - Form Trigger to Record and Confirmation Email",
+  "nodes": [
+    {
+      "parameters": {
+        "formTitle": "Automation Lab - contact us",
+        "formDescription": "Synthetic demo form. Submissions land in the demo database and trigger a confirmation e-mail.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Name",
+              "placeholder": "Your full name",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Email",
+              "fieldType": "email",
+              "placeholder": "you@lab.local",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Company",
+              "placeholder": "Company (optional)"
+            },
+            {
+              "fieldLabel": "Topic",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "Demo request"
+                  },
+                  {
+                    "option": "Support"
+                  },
+                  {
+                    "option": "Partnership"
+                  },
+                  {
+                    "option": "Other"
+                  }
+                ]
+              },
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Message",
+              "fieldType": "textarea",
+              "placeholder": "How can we help?"
+            }
+          ]
+        },
+        "responseMode": "onReceived",
+        "path": "t05-contact",
+        "options": {
+          "buttonLabel": "Send",
+          "path": "t05-contact"
+        }
+      },
+      "id": "2cb2fd00-f6ab-503c-93f0-820b51a18d35",
+      "name": "Contact form",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "dd70f114-c2e9-5f27-ad8f-63c846f86598"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Form submissions arrive keyed by field label. Trim, lower-case the e-mail, derive the company domain, score.\nconst f = $input.first().json;\nconst email = String(f.Email || '').trim().toLowerCase();\nconst company = String(f.Company || '').trim();\nconst topic = String(f.Topic || 'Other');\nconst domain = email.includes('@') ? email.split('@')[1] : null;\nconst score = { 'Demo request': 60, 'Partnership': 50, 'Support': 20, 'Other': 10 }[topic] ?? 10;\nreturn [{ json: {\n  name: String(f.Name || '').trim(), email, company: company || null, domain, topic,\n  message: String(f.Message || '').trim(), score, source: 'form', submitted_at: f.submittedAt || new Date().toISOString(),\n  enriched: JSON.stringify({ topic, message: String(f.Message || '').trim(), form: 't05-contact', submitted_at: f.submittedAt || null }),\n}}];"
+      },
+      "id": "f09351cd-6298-57d2-bc60-7f459f9c4978",
+      "name": "Normalize submission",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        260,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "schema": {
+          "__rl": true,
+          "value": "public",
+          "mode": "list"
+        },
+        "table": {
+          "__rl": true,
+          "value": "leads",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "email": "={{ $json.email }}",
+            "name": "={{ $json.name }}",
+            "company": "={{ $json.company }}",
+            "domain": "={{ $json.domain }}",
+            "source": "form",
+            "score": "={{ $json.score }}",
+            "status": "new",
+            "enriched": "={{ $json.enriched }}"
+          },
+          "matchingColumns": [
+            "email"
+          ],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "ce6f047c-319e-5348-a67e-54fc3b04cc16",
+      "name": "Upsert lead",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        520,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "postgres": {
+          "id": "ALcredPostgresDm",
+          "name": "Postgres - demo"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fromEmail": "automation-lab@lab.local",
+        "toEmail": "={{ $('Normalize submission').item.json.email }}",
+        "subject": "=We received your message - {{ $('Normalize submission').item.json.topic }}",
+        "options": {},
+        "emailFormat": "html",
+        "html": "=<p>Hi {{ $('Normalize submission').item.json.name }},</p><p>thanks for contacting Automation Lab about <b>{{ $('Normalize submission').item.json.topic }}</b>. We will get back to you within one business day.</p><blockquote>{{ $('Normalize submission').item.json.message || '(no message)' }}</blockquote><p>- Automation Lab (T05 demo)</p>"
+      },
+      "id": "fd9635eb-764c-5cd7-b3ea-a1784c9df837",
+      "name": "Confirmation e-mail (Mailpit)",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        780,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "smtp": {
+          "id": "ALcredSmtpMailpt",
+          "name": "SMTP - Mailpit"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "schema": {
+          "__rl": true,
+          "value": "public",
+          "mode": "list"
+        },
+        "table": {
+          "__rl": true,
+          "value": "notifications",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "channel": "email",
+            "target": "={{ $('Normalize submission').item.json.email }}",
+            "subject": "=We received your message - {{ $('Normalize submission').item.json.topic }}",
+            "body": "=T05 confirmation for lead {{ $('Normalize submission').item.json.email }}",
+            "severity": "info",
+            "sent_at": "={{ $now.toISO() }}"
+          },
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "a5afc3e2-65cc-5e60-9918-d5bb8c92d62c",
+      "name": "Record notification",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1040,
+        0
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "postgres": {
+          "id": "ALcredPostgresDm",
+          "name": "Postgres - demo"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "## T05 - Form -> record -> confirmation\nThe form is hosted by n8n at `/form/t05-contact` (published workflow). Submissions arrive keyed by field label; the Code node normalises them and scores the lead by topic.\n\n`leads` is upserted on e-mail (a second submission updates, never duplicates), the submitter gets a confirmation via Mailpit, and `notifications` records what was sent.",
+        "height": 210,
+        "width": 620,
+        "color": 4
+      },
+      "id": "051c8ca2-f324-5601-9db7-bfaf4ec7ee65",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -40,
+        -330
+      ]
+    }
+  ],
+  "connections": {
+    "Contact form": {
+      "main": [
+        [
+          {
+            "node": "Normalize submission",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize submission": {
+      "main": [
+        [
+          {
+            "node": "Upsert lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upsert lead": {
+      "main": [
+        [
+          {
+            "node": "Confirmation e-mail (Mailpit)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Confirmation e-mail (Mailpit)": {
+      "main": [
+        [
+          {
+            "node": "Record notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Africa/Tripoli",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "ALP01ErrorHandle"
+  },
+  "pinData": {},
+  "versionId": "45f3f79d-b64a-5b6f-8845-5b05f37ba281",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "description": "Hosted n8n form -> leads table -> confirmation e-mail."
+  },
+  "id": "ALT05FormToRecor",
+  "tags": [
+    {
+      "name": "automation-lab"
+    },
+    {
+      "name": "Triggers"
+    }
+  ]
+}

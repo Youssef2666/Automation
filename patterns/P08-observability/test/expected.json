@@ -1,0 +1,23 @@
+{
+  "_comment": "What comes back from 'P08 - Log execution'. finished_at defaults to now(), duration_ms = finished - started; a second call with the same execution_id returns action 'updated' and the same row_id.",
+  "first_call": {
+    "ok": true, "logged": true, "action": "inserted", "row_id": 9,
+    "execution_id": "412", "workflow_id": "ALT02DailyDigest", "workflow_name": "T02 - Scheduled Daily Digest",
+    "status": "success", "duration_ms": 1830,
+    "response": "inserted execution_log row 9: success for T02 - Scheduled Daily Digest"
+  },
+  "second_call_same_execution_id": {
+    "ok": true, "logged": true, "action": "updated", "row_id": 9,
+    "response": "updated execution_log row 9: success for T02 - Scheduled Daily Digest"
+  },
+  "execution_log_row": {
+    "execution_id": "412", "workflow_id": "ALT02DailyDigest", "workflow_name": "T02 - Scheduled Daily Digest",
+    "status": "success", "started_at": "2026-09-07 07:00:00.12+02", "finished_at": "<now()>", "duration_ms": "<ms>",
+    "error_message": "digest sent to ops@lab.local (31 orders, 48 open tickets)", "error_node": null
+  },
+  "postgres_down": {
+    "ok": false, "logged": false, "action": "failed", "row_id": null,
+    "response": "execution_log write failed: connect ECONNREFUSED ..."
+  },
+  "missing_status": "Stop and Error: 'P08 log execution: input item needs workflow_id and status in (success|error|warning|info)'"
+}

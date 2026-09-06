@@ -1,0 +1,418 @@
+{
+  "name": "T06 - File Watcher: Process on Drop",
+  "nodes": [
+    {
+      "parameters": {
+        "triggerOn": "folder",
+        "path": "/home/node/.n8n-files/data/inbox",
+        "events": [
+          "add"
+        ],
+        "options": {
+          "awaitWriteFinish": true,
+          "ignoreInitial": true,
+          "usePolling": true,
+          "ignored": "**/.gitkeep"
+        }
+      },
+      "id": "e5751a48-3232-5922-b347-74e66d3088e2",
+      "name": "Watch data/inbox",
+      "type": "n8n-nodes-base.localFileTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "82ff02cb-55fa-55a7-a04d-2c473cccbc0b",
+      "name": "Run once (manual / CLI)",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "4b1cca86-9b2d-532b-a56e-1e6c45df361c",
+              "name": "path",
+              "value": "/home/node/.n8n-files/data/inbox/sample-drop.csv",
+              "type": "string"
+            },
+            {
+              "id": "455f6405-6230-5361-a324-4227880430ab",
+              "name": "event",
+              "value": "manual",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "115fe8c8-02fd-5c9d-94cf-2a88e8add97f",
+      "name": "Sample file (manual runs)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        260,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// One item per dropped file. Works for the trigger output ({path, event}) and for the manual test item.\nconst p = String($json.path || $json.file || '');\nconst name = p.split('/').pop();\nconst ext = (name.includes('.') ? name.split('.').pop() : '').toLowerCase();\nreturn [{ json: { path: p, file_name: name, ext, event: $json.event || 'manual', detected_at: new Date().toISOString() } }];"
+      },
+      "id": "79a83a98-b1d6-5616-a5ed-62f22bf06003",
+      "name": "Describe file",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        520,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "fileSelector": "={{ $json.path }}",
+        "options": {
+          "dataPropertyName": "data"
+        }
+      },
+      "id": "2fdd9b05-38e1-5cde-8b8c-0dce8ab2fea7",
+      "name": "Read dropped file",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        780,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "action": "hash",
+        "type": "SHA256",
+        "dataPropertyName": "hash",
+        "encoding": "hex",
+        "binaryData": true,
+        "binaryPropertyName": "data"
+      },
+      "id": "6c526600-2ae8-57b9-a02a-59b792200307",
+      "name": "SHA-256",
+      "type": "n8n-nodes-base.crypto",
+      "typeVersion": 1,
+      "position": [
+        1040,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "operation": "upload",
+        "bucketName": "artifacts",
+        "fileName": "=inbox/{{ $('Describe file').item.json.file_name }}",
+        "binaryData": true,
+        "binaryPropertyName": "data",
+        "additionalFields": {},
+        "tagsUi": {}
+      },
+      "id": "3c5b68e3-9876-5de7-8dd3-7ef18b06065a",
+      "name": "Archive to MinIO (artifacts)",
+      "type": "n8n-nodes-base.s3",
+      "typeVersion": 1,
+      "position": [
+        1040,
+        220
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "s3": {
+          "id": "ALcredS3MinioLoc",
+          "name": "S3 - MinIO"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "817734bd-ea23-5185-aa0c-ad034b4ae356",
+              "leftValue": "={{ $('Describe file').item.json.ext }}",
+              "rightValue": "csv",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "47bf8f84-96b7-534b-bf59-85f8185e29a7",
+      "name": "CSV?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1040,
+        440
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "csv",
+        "binaryPropertyName": "data",
+        "options": {
+          "headerRow": true
+        }
+      },
+      "id": "a56985ef-e691-5f6f-8641-c1de8c0d24c0",
+      "name": "Parse CSV",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        1300,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "schema": {
+          "__rl": true,
+          "value": "public",
+          "mode": "list"
+        },
+        "table": {
+          "__rl": true,
+          "value": "documents",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "kind": "inbox-file",
+            "file_name": "={{ $('Describe file').item.json.file_name }}",
+            "storage_key": "=s3://artifacts/inbox/{{ $('Describe file').item.json.file_name }}",
+            "meta": "={{ JSON.stringify({ ext: $('Describe file').item.json.ext, sha256: $('SHA-256').item.json.hash, event: $('Describe file').item.json.event }) }}"
+          },
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "5b6bc0b5-34f3-5c7f-82a7-e739919b7c32",
+      "name": "Record document",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1300,
+        220
+      ],
+      "executeOnce": true,
+      "credentials": {
+        "postgres": {
+          "id": "ALcredPostgresDm",
+          "name": "Postgres - demo"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build the receipt (JSON file) from what the run learned; the CSV row count is present only for CSV files.\nconst meta = $('Describe file').first().json;\nconst hash = $('SHA-256').first().json.hash;\nlet rows = null;\ntry { rows = $('Parse CSV').all().length; } catch (e) { rows = null; }\nconst bin = $('Read dropped file').first().binary?.data || {};\nconst receipt = { ...meta, sha256: hash, size: bin.fileSize || null, mime: bin.mimeType || null, csv_rows: rows,\n                  archived_to: `s3://artifacts/inbox/${meta.file_name}`, processed_at: new Date().toISOString() };\nconst body = JSON.stringify(receipt, null, 2);\nreturn [{ json: receipt, binary: { data: { data: Buffer.from(body, 'utf8').toString('base64'), mimeType: 'application/json', fileName: `${meta.file_name}.receipt.json` } } }];"
+      },
+      "id": "972832f4-f020-5acd-9bfd-a8cf96b77d1a",
+      "name": "Build receipt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "=/home/node/.n8n-files/data/out/processed-{{ $json.file_name }}.receipt.json",
+        "dataPropertyName": "data",
+        "options": {}
+      },
+      "id": "71d828bb-c461-5b22-bf1a-e75830bf3b5f",
+      "name": "Write receipt to data/out/processed",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        1820,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## T06 - File watcher\n`Local File Trigger` (polling, `awaitWriteFinish`) on `data/inbox/`. Drop a file on the host, the workflow reads it, hashes it (SHA-256), archives it to MinIO `artifacts/inbox/`, parses CSVs, records a `documents` row and writes a JSON receipt to `data/out/`.\n\nManual runs use the sample path in **Sample file (manual runs)**. The trigger only listens while the workflow is published.",
+        "height": 220,
+        "width": 620,
+        "color": 4
+      },
+      "id": "81133e34-1c0a-521c-957e-2e0653111a24",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -40,
+        -330
+      ]
+    }
+  ],
+  "connections": {
+    "Watch data/inbox": {
+      "main": [
+        [
+          {
+            "node": "Describe file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run once (manual / CLI)": {
+      "main": [
+        [
+          {
+            "node": "Sample file (manual runs)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sample file (manual runs)": {
+      "main": [
+        [
+          {
+            "node": "Describe file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Describe file": {
+      "main": [
+        [
+          {
+            "node": "Read dropped file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read dropped file": {
+      "main": [
+        [
+          {
+            "node": "Archive to MinIO (artifacts)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "CSV?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "SHA-256",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CSV?": {
+      "main": [
+        [
+          {
+            "node": "Parse CSV",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SHA-256": {
+      "main": [
+        [
+          {
+            "node": "Record document",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record document": {
+      "main": [
+        [
+          {
+            "node": "Build receipt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build receipt": {
+      "main": [
+        [
+          {
+            "node": "Write receipt to data/out/processed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Africa/Tripoli",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "ALP01ErrorHandle"
+  },
+  "pinData": {},
+  "versionId": "1840640d-4df9-5212-8c25-d093e3b20b64",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "description": "Watches data/inbox/; every dropped file is hashed, archived to MinIO, parsed if CSV, and receipted."
+  },
+  "id": "ALT06FileWatcher",
+  "tags": [
+    {
+      "name": "automation-lab"
+    },
+    {
+      "name": "Triggers"
+    }
+  ]
+}

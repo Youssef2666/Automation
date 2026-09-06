@@ -1,0 +1,20 @@
+{
+  "_comment": "Calls 1-5 inside one 10 s window are allowed; call 6 is throttled with the time left in the window. window_key ends with floor(now/10) and changes every window.",
+  "call_1": {
+    "ok": true, "allowed": true, "count": 1, "limit": 5, "remaining": 4, "retry_after_ms": 0,
+    "window_key": "rl:harness:178874880", "window_seconds": 10, "key": "harness",
+    "response": "allowed (1/5 in window, 4 left)"
+  },
+  "call_6_same_window": {
+    "ok": true, "allowed": false, "count": 6, "limit": 5, "remaining": 0, "retry_after_ms": 7310,
+    "window_key": "rl:harness:178874880", "window_seconds": 10, "key": "harness",
+    "response": "throttled (6/5); next window in 7310 ms"
+  },
+  "missing_key": "Stop and Error: 'P04 rate limit gate: input item needs a non-empty key'",
+  "harness_report": {
+    "ungated": { "requests": 8, "ok": 5, "status_429": 3 },
+    "gated": { "requests": 8, "ok": 8, "status_429": 0, "throttled_by_gate": 3 },
+    "pass": true,
+    "response": "without gate: 3/8 got 429; with gate: 0/8 got 429"
+  }
+}

@@ -44,7 +44,7 @@ def credential_specs(env: dict[str, str]) -> list[dict]:
                   "port": int(env.get("SMTP_PORT", "1025")), "secure": False, "disableStartTls": True,
                   "hostname": "automation-lab", "allowUnauthorizedCerts": True}},
         {"id": "ALcredImapGreenM", "name": "IMAP - GreenMail", "type": "imap",
-         "data": {"user": env.get("IMAP_USER", "inbox@lab.local"), "password": env.get("IMAP_PASSWORD", "inbox"),
+         "data": {"user": env.get("IMAP_USER", "inbox"), "password": env.get("IMAP_PASSWORD", "inbox"),
                   "host": env.get("IMAP_HOST", "greenmail"), "port": int(env.get("IMAP_PORT", "3143")),
                   "secure": False, "allowUnauthorizedCerts": True}},
         {"id": "ALcredS3MinioLoc", "name": "S3 - MinIO", "type": "s3",

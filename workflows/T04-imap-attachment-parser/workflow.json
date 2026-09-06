@@ -1,0 +1,389 @@
+{
+  "name": "T04 - IMAP Email Trigger to Attachment Parser",
+  "nodes": [
+    {
+      "parameters": {
+        "mailbox": "INBOX",
+        "postProcessAction": "read",
+        "format": "resolved",
+        "downloadAttachments": true,
+        "options": {
+          "customEmailConfig": "[\"UNSEEN\"]",
+          "forceReconnect": 30
+        }
+      },
+      "id": "a21af7ad-d4b9-5d27-83bf-a4b16637c421",
+      "name": "Email Trigger (IMAP - GreenMail)",
+      "type": "n8n-nodes-base.emailReadImap",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "credentials": {
+        "imap": {
+          "id": "ALcredImapGreenM",
+          "name": "IMAP - GreenMail"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// One item per e-mail (format: resolved). Emit one item per attachment, moving that attachment to binary \"data\".\nconst out = [];\nfor (const it of $input.all()) {\n  const m = it.json;\n  const bins = it.binary || {};\n  const keys = Object.keys(bins).filter(k => k.startsWith('attachment_'));\n  const from = (m.from && (m.from.text || (m.from.value && m.from.value[0] && m.from.value[0].address))) || m.from || '';\n  const fromAddr = String(from).match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+/)?.[0] || String(from);\n  if (!keys.length) {\n    out.push({ json: { subject: m.subject, from: fromAddr, message_id: m.messageId, attachment: null, ext: null, has_attachment: false } });\n    continue;\n  }\n  for (const k of keys) {\n    const b = bins[k];\n    const name = b.fileName || k;\n    out.push({ json: { subject: m.subject, from: fromAddr, message_id: m.messageId, attachment: name,\n                       ext: (name.includes('.') ? name.split('.').pop() : '').toLowerCase(), mime: b.mimeType,\n                       size: b.fileSize || null, has_attachment: true, received_at: m.date || new Date().toISOString() },\n               binary: { data: b } });\n  }\n}\nreturn out;"
+      },
+      "id": "bb3996e2-0a07-52be-ba4c-904e933fc944",
+      "name": "List attachments",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        260,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c3f4479d-9b6b-5fad-ac38-7b7558e741db",
+              "leftValue": "={{ String($json.has_attachment) }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "2fc5b45a-b24f-5163-8fb9-285a6c161f89",
+      "name": "Has attachment?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        520,
+        0
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "3f6f8497-2cf9-5900-b7d5-71509078e537",
+      "name": "No attachment - ignore",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        780,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "operation": "upload",
+        "bucketName": "artifacts",
+        "fileName": "=mail/{{ $('List attachments').item.json.attachment }}",
+        "binaryData": true,
+        "binaryPropertyName": "data",
+        "additionalFields": {},
+        "tagsUi": {}
+      },
+      "id": "397eadcd-6f53-5a4c-adf0-c37623b63e54",
+      "name": "Archive to MinIO (artifacts)",
+      "type": "n8n-nodes-base.s3",
+      "typeVersion": 1,
+      "position": [
+        780,
+        220
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "s3": {
+          "id": "ALcredS3MinioLoc",
+          "name": "S3 - MinIO"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "9b9d3961-686f-5c54-8f93-4815788b264f",
+              "leftValue": "={{ $('List attachments').item.json.ext }}",
+              "rightValue": "csv",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "b0dd89cc-68da-538d-95e1-47b2beba048d",
+      "name": "CSV?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        780,
+        440
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "csv",
+        "binaryPropertyName": "data",
+        "options": {
+          "headerRow": true
+        }
+      },
+      "id": "38291af3-1d08-5059-abab-6ae7de36cb97",
+      "name": "Parse CSV",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        1040,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Runs once after the CSV rows were parsed: count them for the documents row (0 when the attachment is not a CSV).\nconst att = $('List attachments').first().json;\nlet rows = 0;\ntry { rows = $('Parse CSV').all().length; } catch (e) { rows = 0; }\nreturn [{ json: { ...att, csv_rows: rows } }];"
+      },
+      "id": "fcb0d6a1-52d0-5143-8d3b-1f43b6c1e2a0",
+      "name": "Summarize attachment",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1300,
+        0
+      ],
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "schema": {
+          "__rl": true,
+          "value": "public",
+          "mode": "list"
+        },
+        "table": {
+          "__rl": true,
+          "value": "documents",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "kind": "email-attachment",
+            "file_name": "={{ $json.attachment }}",
+            "storage_key": "=s3://artifacts/mail/{{ $json.attachment }}",
+            "meta": "={{ JSON.stringify({ from: $json.from, subject: $json.subject, message_id: $json.message_id, mime: $json.mime, csv_rows: $json.csv_rows }) }}"
+          },
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "bc7a56b8-1357-578d-84fa-faa1641118bb",
+      "name": "Record document",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1560,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "ALcredPostgresDm",
+          "name": "Postgres - demo"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fromEmail": "automation-lab@lab.local",
+        "toEmail": "={{ $('Summarize attachment').item.json.from }}",
+        "subject": "=Re: {{ $('Summarize attachment').item.json.subject }} - received",
+        "options": {},
+        "emailFormat": "html",
+        "html": "=<p>We received <b>{{ $('Summarize attachment').item.json.attachment }}</b>{{ $('Summarize attachment').item.json.csv_rows ? ' (' + $('Summarize attachment').item.json.csv_rows + ' rows parsed)' : '' }} and archived it. Reference: {{ $('Summarize attachment').item.json.message_id }}</p><p>- Automation Lab (T04)</p>"
+      },
+      "id": "652b6e74-363c-5c29-b783-363cf832cc34",
+      "name": "Acknowledge sender (Mailpit)",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        1820,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "smtp": {
+          "id": "ALcredSmtpMailpt",
+          "name": "SMTP - Mailpit"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "## T04 - IMAP trigger -> attachment parser\nGreenMail serves IMAP on `greenmail:3143` (user `inbox@lab.local`); `test/send-test-email.py` pushes a message with a CSV through its SMTP port 3025. The trigger polls for UNSEEN mail, marks it read, and delivers attachments as binary `attachment_N`.\n\nEach attachment: archived to MinIO `artifacts/mail/`, parsed when CSV, recorded in `documents`, acknowledged to the sender via Mailpit. Mail without attachments is ignored.",
+        "height": 230,
+        "width": 640,
+        "color": 4
+      },
+      "id": "92568178-fb46-595f-9473-2114d7da8e3a",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -40,
+        -330
+      ]
+    }
+  ],
+  "connections": {
+    "Email Trigger (IMAP - GreenMail)": {
+      "main": [
+        [
+          {
+            "node": "List attachments",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "List attachments": {
+      "main": [
+        [
+          {
+            "node": "Has attachment?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has attachment?": {
+      "main": [
+        [
+          {
+            "node": "Archive to MinIO (artifacts)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "CSV?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No attachment - ignore",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CSV?": {
+      "main": [
+        [
+          {
+            "node": "Parse CSV",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Summarize attachment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse CSV": {
+      "main": [
+        [
+          {
+            "node": "Summarize attachment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Summarize attachment": {
+      "main": [
+        [
+          {
+            "node": "Record document",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record document": {
+      "main": [
+        [
+          {
+            "node": "Acknowledge sender (Mailpit)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Africa/Tripoli",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "ALP01ErrorHandle"
+  },
+  "pinData": {},
+  "versionId": "3a4e4fb6-072f-5283-a941-06320b1f27af",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "description": "Polls a local IMAP inbox (GreenMail); attachments are parsed, archived and acknowledged."
+  },
+  "id": "ALT04ImapAttachm",
+  "tags": [
+    {
+      "name": "automation-lab"
+    },
+    {
+      "name": "Triggers"
+    }
+  ]
+}

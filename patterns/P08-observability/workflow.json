@@ -1,0 +1,227 @@
+{
+  "name": "P08 - Log execution",
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "id": "bf6c4d65-5caf-543e-96d9-7606c03e84ce",
+      "name": "When called by another workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "09bc7104-7bc5-57f4-a102-0cd6939eb80d",
+              "leftValue": "={{ String($json.workflow_id ?? '') }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "879b86dd-7e68-5eef-a5c4-786a19ea2cc0",
+              "leftValue": "={{ String($json.status ?? '') }}",
+              "rightValue": "^(success|error|warning|info)$",
+              "operator": {
+                "type": "string",
+                "operation": "regex"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "0da61be6-4a6a-57e6-ba9e-30744f636868",
+      "name": "Has workflow_id and status?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        260,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "errorMessage": "P08 log execution: input item needs workflow_id and status in (success|error|warning|info)"
+      },
+      "id": "bb3d3c11-c394-52ee-997a-e5c2fc890501",
+      "name": "Missing workflow_id or status",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        520,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// One call = one item. Every optional field becomes null (never undefined) so the SQL casts stay clean.\nconst src = $json;\nconst str = (v, max) => (v === undefined || v === null || v === '') ? null : String(v).slice(0, max || 4000);\nconst iso = (v) => {\n  if (v === undefined || v === null || v === '') return null;\n  const d = new Date(v);\n  return Number.isNaN(d.getTime()) ? null : d.toISOString();\n};\nconst started = iso(src.started_at);\nconst finished = iso(src.finished_at) || new Date().toISOString();   // the log call is the end of the run\nlet duration = (src.duration_ms === undefined || src.duration_ms === null || src.duration_ms === '')\n  ? null : Math.round(Number(src.duration_ms));\nif (duration === null && started) duration = Math.max(0, new Date(finished).getTime() - new Date(started).getTime());\nif (duration !== null && !Number.isFinite(duration)) duration = null;\nconst workflow_id = String(src.workflow_id).trim();\nreturn { json: {\n  execution_id: str(src.execution_id, 64),\n  workflow_id,\n  workflow_name: str(src.workflow_name, 200) || workflow_id,\n  status: String(src.status).trim().toLowerCase(),\n  started_at: started,\n  finished_at: finished,\n  duration_ms: duration,\n  // execution_log has no notes column: notes go to error_message when there is no error message (documented).\n  error_message: str(src.error_message, 500) || str(src.notes, 500),\n  error_node: str(src.error_node, 200),\n  notes: str(src.notes, 500),\n} };",
+        "mode": "runOnceForEachItem"
+      },
+      "id": "0a0e9a9f-3d1b-55cf-b2dd-50b7e587e12f",
+      "name": "Normalize input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        520,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "with input as (\n  select $1::text as execution_id, $2::text as workflow_id, $3::text as workflow_name, $4::text as status,\n         $5::timestamptz as started_at, $6::timestamptz as finished_at, $7::int as duration_ms,\n         $8::text as error_message, $9::text as error_node\n), updated as (\n  update execution_log l\n     set workflow_name = i.workflow_name,\n         status        = i.status,\n         started_at    = coalesce(i.started_at, l.started_at),\n         finished_at   = coalesce(i.finished_at, l.finished_at),\n         duration_ms   = coalesce(i.duration_ms, l.duration_ms),\n         error_message = coalesce(i.error_message, l.error_message),\n         error_node    = coalesce(i.error_node, l.error_node),\n         logged_at     = now()\n    from input i\n   where i.execution_id is not null and l.execution_id = i.execution_id\n  returning l.id, 'updated'::text as action\n), inserted as (\n  insert into execution_log (execution_id, workflow_id, workflow_name, status, started_at, finished_at, duration_ms,\n                             error_message, error_node)\n  select execution_id, workflow_id, workflow_name, status, started_at, finished_at, duration_ms, error_message, error_node\n    from input\n   where not exists (select 1 from updated)\n  returning id, 'inserted'::text as action\n)\nselect id, action from updated\nunion all\nselect id, action from inserted",
+        "options": {
+          "queryReplacement": "={{ [ $json.execution_id, $json.workflow_id, $json.workflow_name, $json.status, $json.started_at, $json.finished_at, $json.duration_ms, $json.error_message, $json.error_node ] }}"
+        }
+      },
+      "id": "e02bbf47-2cfd-581f-a8ba-7ad9f37f015a",
+      "name": "Upsert execution_log",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        780,
+        0
+      ],
+      "notes": "One row per execution_id (update if it exists). Continue on error: logging never fails the caller.",
+      "notesInFlow": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "postgres": {
+          "id": "ALcredPostgresDm",
+          "name": "Postgres - demo"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Runs per item so it pairs with the normalised input even when the Postgres node continued on error.\nconst input = $('Normalize input').item.json;\nconst out = $json;\nconst failed = out.action === undefined;          // continueRegularOutput emits {message, error} instead of a row\nconst response = failed\n  ? `execution_log write failed: ${out.message || (out.error && out.error.message) || 'unknown error'}`\n  : `${out.action} execution_log row ${out.id}: ${input.status} for ${input.workflow_name}`;\nreturn { json: {\n  ok: !failed,\n  logged: !failed,\n  action: failed ? 'failed' : out.action,\n  row_id: failed ? null : out.id,\n  execution_id: input.execution_id,\n  workflow_id: input.workflow_id,\n  workflow_name: input.workflow_name,\n  status: input.status,\n  duration_ms: input.duration_ms,\n  response,\n} };",
+        "mode": "runOnceForEachItem"
+      },
+      "id": "e51da80d-ae4b-546d-9b84-e9912cd4f61c",
+      "name": "Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1040,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## P08 - Log execution\nCall at the **end of the happy path** with `{execution_id, workflow_id, workflow_name, status, started_at?, notes?}`; P01 logs the failures.\n\nStatus vocabulary: `success` | `warning` (ran, something worth a look) | `info` (ran, nothing to do) | `error` (P01 / manual).\n\nUpsert by `execution_id` (last call wins) -> `{ok, logged, action, row_id, response}`. Pass `$execution.id` / `$workflow.id` from the caller: inside this sub-workflow they refer to P08 itself.",
+        "height": 250,
+        "width": 640,
+        "color": 4
+      },
+      "id": "92ef1cdd-4a0f-5d4c-86f8-393438e89ebf",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -40,
+        -330
+      ]
+    }
+  ],
+  "connections": {
+    "When called by another workflow": {
+      "main": [
+        [
+          {
+            "node": "Has workflow_id and status?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has workflow_id and status?": {
+      "main": [
+        [
+          {
+            "node": "Normalize input",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Missing workflow_id or status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize input": {
+      "main": [
+        [
+          {
+            "node": "Upsert execution_log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upsert execution_log": {
+      "main": [
+        [
+          {
+            "node": "Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Africa/Tripoli",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "ALP01ErrorHandle"
+  },
+  "pinData": {},
+  "versionId": "ec7f3b21-8aa5-58da-989a-cb765a2922df",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "description": "Writes one structured execution_log row per run (upsert by execution_id); never fails the caller."
+  },
+  "id": "ALP08Observabili",
+  "tags": [
+    {
+      "name": "automation-lab"
+    },
+    {
+      "name": "pattern"
+    },
+    {
+      "name": "P08"
+    }
+  ]
+}

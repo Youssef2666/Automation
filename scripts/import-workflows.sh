@@ -44,7 +44,15 @@ EOF
 done
 
 echo "importing ${#IDS[@]} workflow(s)..."
-docker compose exec -T n8n n8n import:workflow --separate --input="$STAGING"
+# Deactivate first: an active trigger/schedule keeps running in the n8n process with the OLD definition after a
+# plain import (stale triggers -> duplicate executions). Deactivating via the API removes it cleanly.
+for id in "${IDS[@]}"; do
+  [ -n "$id" ] || continue
+  python scripts/dev/publish.py "$id" --off >/dev/null 2>&1 || true
+done
+# One file per import call: a batch (--separate) that introduces the same NEW tag on two workflows fails with
+# "duplicate key value violates unique constraint" on tag_entity.name (n8n 2.37).
+docker compose exec -T n8n sh -c "for f in $STAGING/*.json; do n8n import:workflow --input=\"\$f\" 2>&1 | grep -E 'Successfully|rror' | sed \"s|^|  \$(basename \$f): |\"; done"
 docker compose exec -T n8n sh -c "rm -rf $STAGING"
 
 # import:workflow always leaves a workflow inactive (even when it was active before), so re-publish what needs

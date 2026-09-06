@@ -1,0 +1,312 @@
+{
+  "name": "P08 - P08 harness (test)",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "0eaed92d-ac59-5003-a563-20d6b8c7a2d4",
+      "name": "Run once (manual / CLI)",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "fa149856-c42c-5328-977f-5140dd6ad801",
+              "name": "started_at",
+              "value": "={{ $now.toISO() }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "6b9623df-ab5a-5de5-ab91-7c0ac1180225",
+      "name": "Started",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        260,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "1f5488ae-e7b4-5567-bf9d-5e4c1eb02e2c",
+              "name": "execution_id",
+              "value": "={{ $execution.id }}",
+              "type": "string"
+            },
+            {
+              "id": "6bc8b3bb-2551-55b4-9e89-b9d7a0a19482",
+              "name": "workflow_id",
+              "value": "={{ $workflow.id }}",
+              "type": "string"
+            },
+            {
+              "id": "f19d9250-aba2-54f5-9da4-820b96911ae8",
+              "name": "workflow_name",
+              "value": "={{ $workflow.name }}",
+              "type": "string"
+            },
+            {
+              "id": "b2bfe1eb-65b0-545b-bcc2-61b703877a45",
+              "name": "status",
+              "value": "success",
+              "type": "string"
+            },
+            {
+              "id": "b4deaad0-07ac-58f1-8bc8-30da5b5e2ecc",
+              "name": "started_at",
+              "value": "={{ $('Started').item.json.started_at }}",
+              "type": "string"
+            },
+            {
+              "id": "f4443e46-bed7-5305-844a-02603c8eaa6d",
+              "name": "notes",
+              "value": "harness: 5 of 5 rows processed",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "8df069c3-b448-59f1-8719-82a8717f53b3",
+      "name": "Simulate success",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        520,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "ALP08Observabili",
+          "mode": "id",
+          "cachedResultName": "P08 - Log execution"
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "1327e50e-40d4-58ee-ba1b-66e0f47711ab",
+      "name": "Log success (P08)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1,
+      "position": [
+        780,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "62789969-086a-5fff-9584-336b921c09ce",
+              "name": "execution_id",
+              "value": "={{ $execution.id }}-warn",
+              "type": "string"
+            },
+            {
+              "id": "f2844b26-dc35-5351-bbb0-63d88d17307b",
+              "name": "workflow_id",
+              "value": "={{ $workflow.id }}",
+              "type": "string"
+            },
+            {
+              "id": "fc7f24db-b746-5e4f-bbfb-6024cccd3f7c",
+              "name": "workflow_name",
+              "value": "={{ $workflow.name }}",
+              "type": "string"
+            },
+            {
+              "id": "2f2e6b27-faa1-5df7-bca9-a005972e2d43",
+              "name": "status",
+              "value": "warning",
+              "type": "string"
+            },
+            {
+              "id": "5f4d5b79-c520-5f97-ba96-e78727e81cd4",
+              "name": "started_at",
+              "value": "={{ $('Started').item.json.started_at }}",
+              "type": "string"
+            },
+            {
+              "id": "6b1eb277-bc8e-5de3-a719-73b52991bd93",
+              "name": "notes",
+              "value": "harness: 2 of 5 rows skipped (simulated partial failure)",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "2f87b281-1c3d-5051-9142-dfbb1b22c099",
+      "name": "Simulate warning",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1040,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "ALP08Observabili",
+          "mode": "id",
+          "cachedResultName": "P08 - Log execution"
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "b8962107-6817-55c7-826d-9ccded0f81ae",
+      "name": "Log warning (P08)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1,
+      "position": [
+        1300,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const a = $('Log success (P08)').first().json;\nconst b = $input.first().json;\nreturn [{ json: { success_call: a, warning_call: b, both_logged: Boolean(a.logged && b.logged) } }];"
+      },
+      "id": "a3a3745d-5eaa-5598-8f3c-b44dc84eef27",
+      "name": "Harness result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## P08 harness\nRuns P08 twice from one manual execution: `success` (execution_id = $execution.id) and `warning` (execution_id suffixed `-warn` so it lands in a second row). Check `select * from execution_log order by id desc limit 2`.",
+        "height": 170,
+        "width": 560,
+        "color": 4
+      },
+      "id": "6153f0aa-fd6c-515c-8e40-774709d2e53b",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -40,
+        -260
+      ]
+    }
+  ],
+  "connections": {
+    "Run once (manual / CLI)": {
+      "main": [
+        [
+          {
+            "node": "Started",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Started": {
+      "main": [
+        [
+          {
+            "node": "Simulate success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simulate success": {
+      "main": [
+        [
+          {
+            "node": "Log success (P08)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log success (P08)": {
+      "main": [
+        [
+          {
+            "node": "Simulate warning",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simulate warning": {
+      "main": [
+        [
+          {
+            "node": "Log warning (P08)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log warning (P08)": {
+      "main": [
+        [
+          {
+            "node": "Harness result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Africa/Tripoli",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "ALP01ErrorHandle"
+  },
+  "pinData": {},
+  "versionId": "8ed770fc-06d9-5ada-8ab4-28fc7c161afe",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "description": "Calls P08 - Log execution twice (success + warning). Test fixture only."
+  },
+  "id": "ALP08Harness0000",
+  "tags": [
+    {
+      "name": "automation-lab"
+    },
+    {
+      "name": "test"
+    }
+  ]
+}
