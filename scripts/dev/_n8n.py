@@ -131,8 +131,12 @@ def compose(*args: str, capture: bool = True, check: bool = True, timeout: int =
 
 
 def n8n_cli(*args: str, timeout: int = 600) -> subprocess.CompletedProcess:
-    """Run an n8n CLI command inside the running n8n container."""
-    return compose("exec", "-T", "n8n", "n8n", *args, check=False, timeout=timeout)
+    """Run an n8n CLI command inside the running n8n container.
+
+    A second n8n process needs its own task-broker port (the server already owns 5679), otherwise `n8n execute`
+    aborts with "port 5679 is already in use"."""
+    return compose("exec", "-T", "-e", "N8N_RUNNERS_BROKER_PORT=5680", "n8n", "n8n", *args, check=False,
+                   timeout=timeout)
 
 
 def psql(sql: str, db: str | None = None) -> str:

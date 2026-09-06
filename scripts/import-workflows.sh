@@ -28,8 +28,8 @@ if [ ${#FOLDERS[@]} -eq 0 ]; then
 fi
 [ ${#FOLDERS[@]} -gt 0 ] || { echo "no workflow folders found"; exit 1; }
 
-STAGING=/tmp/automation-lab-import
-docker compose exec -T n8n sh -c "rm -rf $STAGING && mkdir -p $STAGING"
+STAGING=/tmp/automation-lab-import-$$-$RANDOM   # unique per run so parallel imports do not collide
+docker compose exec -T n8n sh -c "mkdir -p $STAGING"
 IDS=()
 for f in "${FOLDERS[@]}"; do
   [ -f "$f/workflow.json" ] || { echo "skip $f (no workflow.json)"; continue; }
@@ -45,6 +45,7 @@ done
 
 echo "importing ${#IDS[@]} workflow(s)..."
 docker compose exec -T n8n n8n import:workflow --separate --input="$STAGING"
+docker compose exec -T n8n sh -c "rm -rf $STAGING"
 
 if [ "$PUBLISH" -eq 1 ]; then
   for id in "${IDS[@]}"; do
