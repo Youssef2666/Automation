@@ -1,0 +1,295 @@
+{
+  "name": "P06 - Replay test payloads",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "7dd757f0-4593-5b52-a11e-aba567495f49",
+      "name": "Run once (manual / CLI)",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Same cases as test/cases.json (embedded by the authoring script).\nconst cases = [\n  {\n    \"name\": \"mock-api health\",\n    \"method\": \"GET\",\n    \"url\": \"http://mock-api:8080/health\",\n    \"expect_status\": 200,\n    \"expect_path\": \"status\",\n    \"expect_value\": \"ok\"\n  },\n  {\n    \"name\": \"mock-api simulated outage\",\n    \"method\": \"GET\",\n    \"url\": \"http://mock-api:8080/health/down\",\n    \"expect_status\": 503,\n    \"expect_path\": \"status\",\n    \"expect_value\": \"down\"\n  },\n  {\n    \"name\": \"P01 fixture webhook accepts\",\n    \"method\": \"POST\",\n    \"url\": \"http://n8n:5678/webhook/p01-fail\",\n    \"body\": {\n      \"source\": \"p06\"\n    },\n    \"expect_status\": 200,\n    \"expect_path\": \"message\",\n    \"expect_value\": \"Workflow was started\"\n  },\n  {\n    \"name\": \"T01 valid order (201 first, 200 replay)\",\n    \"method\": \"POST\",\n    \"url\": \"http://n8n:5678/webhook/t01-orders\",\n    \"headers\": {\n      \"X-Lab-Key\": \"lab-demo-key\",\n      \"Content-Type\": \"application/json\"\n    },\n    \"body\": {\n      \"external_id\": \"evt-p06-replay\",\n      \"order_number\": \"ORD-2026-9101\",\n      \"source\": \"webshop\",\n      \"customer\": {\n        \"external_id\": \"CUST-0007\",\n        \"email\": \"omar.nasr@lab.local\",\n        \"name\": \"Omar Nasr\"\n      },\n      \"currency\": \"USD\",\n      \"items\": [\n        {\n          \"sku\": \"SKU-0003\",\n          \"name\": \"Compact Ergonomic Chair\",\n          \"qty\": 2,\n          \"unit_price\": 169.0\n        },\n        {\n          \"sku\": \"SKU-0018\",\n          \"name\": \"Deluxe Electric Kettle\",\n          \"qty\": 1,\n          \"unit_price\": 95.9\n        }\n      ],\n      \"total\": 433.9,\n      \"ordered_at\": \"2026-09-01T08:55:00Z\"\n    },\n    \"expect_status\": [\n      200,\n      201\n    ],\n    \"expect_path\": \"ok\",\n    \"expect_value\": true,\n    \"optional\": true\n  },\n  {\n    \"name\": \"T01 invalid order -> 400 with errors\",\n    \"method\": \"POST\",\n    \"url\": \"http://n8n:5678/webhook/t01-orders\",\n    \"headers\": {\n      \"X-Lab-Key\": \"lab-demo-key\",\n      \"Content-Type\": \"application/json\"\n    },\n    \"body\": {\n      \"order_number\": 12345,\n      \"customer\": {\n        \"email\": \"not-an-email\"\n      },\n      \"items\": [],\n      \"total\": \"twenty\",\n      \"ordered_at\": \"yesterday\"\n    },\n    \"expect_status\": 400,\n    \"expect_path\": \"ok\",\n    \"expect_value\": false,\n    \"optional\": true\n  },\n  {\n    \"name\": \"T01 without key -> 403\",\n    \"method\": \"POST\",\n    \"url\": \"http://n8n:5678/webhook/t01-orders\",\n    \"headers\": {\n      \"Content-Type\": \"application/json\"\n    },\n    \"body\": {\n      \"external_id\": \"evt-p06-replay\",\n      \"order_number\": \"ORD-2026-9101\",\n      \"source\": \"webshop\",\n      \"customer\": {\n        \"external_id\": \"CUST-0007\",\n        \"email\": \"omar.nasr@lab.local\",\n        \"name\": \"Omar Nasr\"\n      },\n      \"currency\": \"USD\",\n      \"items\": [\n        {\n          \"sku\": \"SKU-0003\",\n          \"name\": \"Compact Ergonomic Chair\",\n          \"qty\": 2,\n          \"unit_price\": 169.0\n        },\n        {\n          \"sku\": \"SKU-0018\",\n          \"name\": \"Deluxe Electric Kettle\",\n          \"qty\": 1,\n          \"unit_price\": 95.9\n        }\n      ],\n      \"total\": 433.9,\n      \"ordered_at\": \"2026-09-01T08:55:00Z\"\n    },\n    \"expect_status\": 403,\n    \"optional\": true\n  }\n];\nreturn cases.map(c => ({ json: c }));"
+      },
+      "id": "d64a6b24-f381-50e3-981b-bd7b0f5020ee",
+      "name": "Test plan",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        260,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "={{ $json.method }}",
+        "url": "={{ $json.url }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "autodetect"
+            }
+          },
+          "timeout": 15000
+        },
+        "sendHeaders": true,
+        "specifyHeaders": "json",
+        "jsonHeaders": "={{ JSON.stringify($json.headers || {}) }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body ?? {}) }}"
+      },
+      "id": "2bc0cfa6-a4a8-5aaa-8eb9-21738f923d61",
+      "name": "HTTP Request",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        520,
+        0
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Runs once per case (paired with its Test plan item). Works for both HTTP outputs (response / error output).\nconst c = $('Test plan').item.json;\nconst r = $json;\nconst failed = r.error !== undefined && r.statusCode === undefined;\nconst status = failed ? 0 : Number(r.statusCode || 0);\nconst body = failed ? null : r.body;\nconst expected = Array.isArray(c.expect_status) ? c.expect_status : [c.expect_status];\nconst problems = [];\nlet skipped = false;\nif (c.optional && (status === 404 || status === 0)) {\n  skipped = true;                                     // target workflow not imported / not active\n} else {\n  if (!expected.includes(status)) problems.push(`status ${status}, expected ${expected.join(' or ')}`);\n  if (c.expect_path !== undefined) {\n    const got = c.expect_path.split('.').reduce((o, k) => (o == null ? undefined : o[k]), body);\n    if (JSON.stringify(got) !== JSON.stringify(c.expect_value)) problems.push(`${c.expect_path} = ${JSON.stringify(got)}, expected ${JSON.stringify(c.expect_value)}`);\n  }\n}\nreturn { json: { name: c.name, url: c.url, pass: !skipped && problems.length === 0, skipped, status,\n                 detail: skipped ? 'skipped (target not available)' : (problems.join('; ') || 'ok'),\n                 error: failed ? String((r.error && r.error.message) || 'request failed') : null } };",
+        "mode": "runOnceForEachItem"
+      },
+      "id": "9ba749f8-9b07-5a1e-8370-dd4b5cd931c7",
+      "name": "Assert",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        780,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "destinationFieldName": "data",
+        "options": {}
+      },
+      "id": "89bcc5c1-c6cf-571d-8cf0-1c770e05f401",
+      "name": "Collect results",
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        1040,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const cases = $input.first().json.data || [];\nconst passed = cases.filter(c => c.pass).length;\nconst skipped = cases.filter(c => c.skipped).length;\nconst failed = cases.filter(c => !c.pass && !c.skipped);\nconst lines = cases.map(c => `${c.pass ? 'PASS' : c.skipped ? 'SKIP' : 'FAIL'}  ${c.name}  [${c.status}] ${c.detail}`);\nreturn [{ json: { total: cases.length, passed, failed: failed.length, skipped,\n                  failed_names: failed.map(c => c.name), report: lines.join('\\n'), cases } }];"
+      },
+      "id": "6f067349-a87f-5814-a57e-23b8c5822b79",
+      "name": "Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1300,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "5fede006-0e03-5b56-b5ad-b89834bfa322",
+              "leftValue": "={{ $json.failed }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "54103ce7-816f-5c32-8ed8-c4d66b18aa59",
+      "name": "Any failures?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1560,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "errorMessage": "=P06: {{ $json.failed }} of {{ $json.total }} case(s) failed: {{ $json.failed_names.join(', ') }}\n{{ $json.report }}"
+      },
+      "id": "a60e3b2b-86c2-5e50-b2e8-1991b6922030",
+      "name": "Fail the run",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        1820,
+        0
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "8656b992-da40-55e8-a51b-8171054a3322",
+      "name": "All green",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1820,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## P06 - Replay test payloads\nCases = `test/cases.json` (embedded here by the authoring script). Each case: method, url, headers, body, expected status (or list), optional JSON path + value. `optional: true` cases are *skipped* (not failed) when the target answers 404 / is unreachable.\n\nNon-2xx responses are data, not errors (full response + never error), so one failing case never hides the others. Any failure ends in Stop and Error -> P01 alerts if this runs on a schedule.\n\nHosts: `n8n:5678` / `mock-api:8080` are compose service names (this is the one place the lab targets n8n itself).",
+        "height": 280,
+        "width": 680,
+        "color": 4
+      },
+      "id": "c6928585-a2aa-5194-b837-e5f088a6371c",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -40,
+        -360
+      ]
+    }
+  ],
+  "connections": {
+    "Run once (manual / CLI)": {
+      "main": [
+        [
+          {
+            "node": "Test plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Test plan": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Assert",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Assert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Assert": {
+      "main": [
+        [
+          {
+            "node": "Collect results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect results": {
+      "main": [
+        [
+          {
+            "node": "Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Report": {
+      "main": [
+        [
+          {
+            "node": "Any failures?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Any failures?": {
+      "main": [
+        [
+          {
+            "node": "Fail the run",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "All green",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Africa/Tripoli",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "ALP01ErrorHandle"
+  },
+  "pinData": {},
+  "versionId": "443a9441-c3a1-5a3e-b6a5-f1ff1fe2c3ba",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "description": "Replays test/ payloads against webhooks and services and asserts status + JSON."
+  },
+  "id": "ALP06Testing0000",
+  "tags": [
+    {
+      "name": "automation-lab"
+    },
+    {
+      "name": "pattern"
+    },
+    {
+      "name": "P06"
+    }
+  ]
+}

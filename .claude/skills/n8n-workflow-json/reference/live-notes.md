@@ -52,3 +52,9 @@ Facts proven against the running stack on 2026-09-06. Add to this file whenever 
 - HTTP Request v4.2 with `fullResponse` + `neverError`: output `{body, headers, statusCode, statusMessage}`; only
   connection-level failures go to the error output (`continueErrorOutput`) as `{error:{message,...}}`.
 - `$('Node').last().json` works inside loops (returns the latest run of that node).
+- **Boolean node parameters do not evaluate expressions** (e.g. HTTP Request `sendBody: "={{ ... }}"` sent no
+  body at all, silently). Use static `True/False` and put the dynamic part in the value (`jsonBody`).
+- HTTP Request `specifyHeaders: json` + `jsonHeaders: ={{ JSON.stringify(obj) }}` and `specifyBody: json` +
+  `jsonBody: ={{ JSON.stringify(obj) }}` work; hostnames `n8n:5678`, `mock-api:8080` resolve inside the network.
+- Code node `runOnceForEachItem` + `$('Earlier node').item.json` pairs correctly even when the input comes from
+  an HTTP node's error output.

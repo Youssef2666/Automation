@@ -1,0 +1,131 @@
+[
+  {
+    "name": "mock-api health",
+    "method": "GET",
+    "url": "http://mock-api:8080/health",
+    "expect_status": 200,
+    "expect_path": "status",
+    "expect_value": "ok"
+  },
+  {
+    "name": "mock-api simulated outage",
+    "method": "GET",
+    "url": "http://mock-api:8080/health/down",
+    "expect_status": 503,
+    "expect_path": "status",
+    "expect_value": "down"
+  },
+  {
+    "name": "P01 fixture webhook accepts",
+    "method": "POST",
+    "url": "http://n8n:5678/webhook/p01-fail",
+    "body": {
+      "source": "p06"
+    },
+    "expect_status": 200,
+    "expect_path": "message",
+    "expect_value": "Workflow was started"
+  },
+  {
+    "name": "T01 valid order (201 first, 200 replay)",
+    "method": "POST",
+    "url": "http://n8n:5678/webhook/t01-orders",
+    "headers": {
+      "X-Lab-Key": "lab-demo-key",
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "external_id": "evt-p06-replay",
+      "order_number": "ORD-2026-9101",
+      "source": "webshop",
+      "customer": {
+        "external_id": "CUST-0007",
+        "email": "omar.nasr@lab.local",
+        "name": "Omar Nasr"
+      },
+      "currency": "USD",
+      "items": [
+        {
+          "sku": "SKU-0003",
+          "name": "Compact Ergonomic Chair",
+          "qty": 2,
+          "unit_price": 169.0
+        },
+        {
+          "sku": "SKU-0018",
+          "name": "Deluxe Electric Kettle",
+          "qty": 1,
+          "unit_price": 95.9
+        }
+      ],
+      "total": 433.9,
+      "ordered_at": "2026-09-01T08:55:00Z"
+    },
+    "expect_status": [
+      200,
+      201
+    ],
+    "expect_path": "ok",
+    "expect_value": true,
+    "optional": true
+  },
+  {
+    "name": "T01 invalid order -> 400 with errors",
+    "method": "POST",
+    "url": "http://n8n:5678/webhook/t01-orders",
+    "headers": {
+      "X-Lab-Key": "lab-demo-key",
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "order_number": 12345,
+      "customer": {
+        "email": "not-an-email"
+      },
+      "items": [],
+      "total": "twenty",
+      "ordered_at": "yesterday"
+    },
+    "expect_status": 400,
+    "expect_path": "ok",
+    "expect_value": false,
+    "optional": true
+  },
+  {
+    "name": "T01 without key -> 403",
+    "method": "POST",
+    "url": "http://n8n:5678/webhook/t01-orders",
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "external_id": "evt-p06-replay",
+      "order_number": "ORD-2026-9101",
+      "source": "webshop",
+      "customer": {
+        "external_id": "CUST-0007",
+        "email": "omar.nasr@lab.local",
+        "name": "Omar Nasr"
+      },
+      "currency": "USD",
+      "items": [
+        {
+          "sku": "SKU-0003",
+          "name": "Compact Ergonomic Chair",
+          "qty": 2,
+          "unit_price": 169.0
+        },
+        {
+          "sku": "SKU-0018",
+          "name": "Deluxe Electric Kettle",
+          "qty": 1,
+          "unit_price": 95.9
+        }
+      ],
+      "total": 433.9,
+      "ordered_at": "2026-09-01T08:55:00Z"
+    },
+    "expect_status": 403,
+    "optional": true
+  }
+]

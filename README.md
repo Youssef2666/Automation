@@ -69,7 +69,7 @@ current screenshot and passes `scripts/validate.py` (see [CONTRIBUTING.md](CONTR
 
 Generated from each folder's README front-matter. Do not edit between the markers.
 
-<!-- STATS:START -->**4 of 36 workflows shipped · 3 of 8 patterns**<!-- STATS:END -->
+<!-- STATS:START -->**4 of 36 workflows shipped · 4 of 8 patterns**<!-- STATS:END -->
 
 <!-- MATRIX:START -->
 ### Triggers (3/7 shipped)
@@ -156,7 +156,7 @@ Each pattern documents a failure story, the rule, its n8n implementation, the tr
 | P03 | [Idempotency](patterns/P03-idempotency/) | [T01](workflows/T01-webhook-to-database/) | ✅ shipped |
 | P04 | Rate Limiting and Batching | - | 📋 planned |
 | P05 | Sub-workflow Modularity | - | 📋 planned |
-| P06 | Testing and Mock Payloads | - | 📋 planned |
+| P06 | [Testing and Mock Payloads](patterns/P06-testing/) | - | ✅ shipped |
 | P07 | Secrets in a Public Repo | - | 📋 planned |
 | P08 | Observability | - | 📋 planned |
 <!-- PATTERNS:END -->

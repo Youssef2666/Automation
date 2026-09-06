@@ -70,7 +70,7 @@ def build() -> Workflow:
     req.parameters.update({
         "sendQuery": True, "specifyQuery": "json", "jsonQuery": "={{ JSON.stringify($json.query || {}) }}",
         "sendHeaders": True, "specifyHeaders": "json", "jsonHeaders": "={{ JSON.stringify($json.headers || {}) }}",
-        "sendBody": "={{ $json.body !== null && $json.body !== undefined && $json.method !== 'GET' }}",
+        "sendBody": True,  # boolean params ignore expressions (proven by P06); an empty {} body on GET is harmless
         "specifyBody": "json", "jsonBody": "={{ JSON.stringify($json.body ?? {}) }}",
     })
     req.parameters["options"]["timeout"] = "={{ $json.timeout_ms }}"
