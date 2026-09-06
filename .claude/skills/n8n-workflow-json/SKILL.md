@@ -25,7 +25,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 from n8n_builder import *
 
 wf = Workflow("T01", "webhook-to-database", "Webhook to Database", tags=["Triggers"],
-              error_workflow=wf_id("P01", "error-handler"))
+              error_workflow=catalog_id("P01"))
 hook = webhook(wf, "Webhook", path="t01-orders")                       # POST /webhook/t01-orders
 check = if_(wf, "Valid payload?", [cond_exists("={{ $json.body.email }}")])
 save = postgres_insert(wf, "Insert order", "webhook_events")           # autoMap input -> columns
@@ -116,7 +116,7 @@ Files: `/home/node/.n8n-files/seed/...` (read-only seed files), `/home/node/.n8n
 
 ## 6. Production judgement (what reviewers look for)
 
-* Every workflow sets `error_workflow=wf_id("P01", "error-handler")` unless it *is* P01.
+* Every workflow sets `error_workflow=catalog_id("P01")` unless it *is* P01. Folder slugs and ids of every catalog item come from `CATALOG` / `catalog_id(code)` in the builder; sub-workflow calls use `execute_workflow(wf, name, catalog_id("P03"))`.
 * External calls (`http`, `postgres_*`, `s3_*`) get `.retry(3, 1000)` unless retrying is unsafe (non-idempotent writes).
 * Webhooks respond with explicit codes (400 on bad schema, 202 on accepted-async, 409 on duplicate).
 * Idempotency for anything replayable: Redis `INCR` guard (P03) or `ON CONFLICT` upserts.

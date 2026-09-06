@@ -25,10 +25,16 @@ same contract as a workflow (README front-matter, `workflow.json` when it ships 
 1. **Problem** - concrete failure story (duplicate charges on replay, alert storms, silent 429s...).
 2. **Pattern** - the rule in one paragraph; decision table for when it applies and when it does not.
 3. **Implementation in n8n** - the shipped sub-workflow node by node; the exact way a caller wires it
-   (Execute Workflow node with `wf_id("P03", "idempotency-guard")`, what to pass, what comes back).
+   (Execute Workflow node with `catalog_id("P03")`, what to pass, what comes back).
 4. **Trade-offs** - what it costs, what it does not solve.
 5. **Used by** - list of workflow ids/titles. Keep this in sync with the workflows' `patterns:` front-matter
    (`python scripts/build-matrix.py` prints a warning when they disagree).
+
+## Folder slugs and ids
+
+Folder names are fixed by `CATALOG` in `n8n_builder.py` (`P01-error-handler`, `P02-retry-backoff`, `P03-idempotency`,
+`P04-rate-limiting`, `P05-sub-workflows`, `P06-testing`, `P07-secrets`, `P08-observability`). A caller references a
+pattern's workflow with `catalog_id("P03")`; the error workflow of every item is `catalog_id("P01")`.
 
 ## Sub-workflow contract (P05 rules, apply to every shipped building block)
 

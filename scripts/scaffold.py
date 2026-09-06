@@ -264,7 +264,7 @@ def scaffold(root: Path, code: str, slug: str, title: str, *, category: str | No
     files[folder / "test" / "README.md"] = TEST_README.format(code=code, rows=rows)
     files[root / authoring_rel] = AUTHORING_STUB.format(
         code=code, slug=slug, title=title, tag=category,
-        error_kw="" if code == "P01" else ',\n              error_workflow=wf_id("P01", "error-handler")',
+        error_kw="" if code == "P01" else ',\n              error_workflow=catalog_id("P01")',
         authoring_rel=authoring_rel.as_posix(), folder_rel=validate.rel(folder, root),
         sticky=f"## {code} - {title}\nTODO: two or three lines on the flow and the patterns used"
                + (f" ({', '.join(patterns)})." if patterns else "."),

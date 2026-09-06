@@ -1,0 +1,18 @@
+{
+  "execution": {
+    "id": "231",
+    "url": "http://localhost:5678/workflow/ALT01WebhookToDa/executions/231",
+    "retryOf": null,
+    "error": {
+      "message": "connect ECONNREFUSED 172.20.0.9:8080",
+      "stack": "NodeApiError: connect ECONNREFUSED 172.20.0.9:8080\n    at Object.execute (HttpRequest.node.js:1203)"
+    },
+    "lastNodeExecuted": "Fetch products",
+    "mode": "trigger",
+    "startedAt": "2026-09-06T03:12:40.000Z"
+  },
+  "workflow": {
+    "id": "ALT01WebhookToDa",
+    "name": "T01 - Webhook to Database"
+  }
+}

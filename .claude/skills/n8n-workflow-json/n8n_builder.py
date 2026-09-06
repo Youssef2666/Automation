@@ -86,6 +86,30 @@ def wf_id(code: str, slug: str) -> str:
     return ("AL" + code + camel)[:16].ljust(16, "0")
 
 
+# Canonical folder slugs for every catalog item (folder = f"{code}-{slug}", workflow id = catalog_id(code)).
+CATALOG: dict[str, str] = {
+    "T01": "webhook-to-database", "T02": "daily-digest", "T03": "api-polling", "T04": "imap-attachment-parser",
+    "T05": "form-to-record", "T06": "file-watcher", "T07": "telegram-command-router",
+    "D01": "csv-import-validation", "D02": "web-scrape-to-json", "D03": "multi-source-aggregation",
+    "D04": "incremental-sync", "D05": "db-dump-to-minio",
+    "M01": "uptime-monitor", "M02": "github-events-to-chat", "M03": "rss-keyword-digest",
+    "M04": "db-threshold-alert", "M05": "exchange-rate-watcher",
+    "R01": "pdf-invoice", "R02": "bulk-certificates", "R03": "arabic-rtl-report", "R04": "pdf-to-dataset",
+    "A01": "rag-docs-chatbot", "A02": "ticket-classifier", "A03": "audio-to-tasks", "A04": "arabic-ocr",
+    "A05": "agent-with-tools", "A06": "article-to-social",
+    "B01": "lead-capture-sequence", "B02": "booking-reminders", "B03": "receipt-ocr-rollup", "B04": "support-triage-sla",
+    "O01": "actions-validate-lint", "O02": "actions-changelog-release", "O03": "issue-triage-bot",
+    "O04": "nightly-workflow-export", "O05": "execution-logs-metabase",
+    "P01": "error-handler", "P02": "retry-backoff", "P03": "idempotency", "P04": "rate-limiting",
+    "P05": "sub-workflows", "P06": "testing", "P07": "secrets", "P08": "observability",
+}
+
+
+def catalog_id(code: str) -> str:
+    """Deterministic workflow id of a catalog item, e.g. catalog_id("P03") for an Execute Workflow node."""
+    return wf_id(code, CATALOG[code])
+
+
 def cred_ref(key: str) -> dict[str, dict[str, str]]:
     ctype, cid, cname = CREDS[key]
     return {ctype: {"id": cid, "name": cname}}

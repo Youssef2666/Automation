@@ -1,0 +1,72 @@
+{
+  "name": "P01 - Failing caller (P01 test)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "p01-fail",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "5d4cf862-7710-573d-8cad-3065ee1d3f0f",
+      "name": "POST /webhook/p01-fail",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "7cc4b42b-17ac-5023-9963-2e61b55211d2"
+    },
+    {
+      "parameters": {
+        "errorMessage": "P01 test: simulated ECONNREFUSED talking to mock-api"
+      },
+      "id": "939735dd-2252-5c2b-b5d0-e5a5e2724c6a",
+      "name": "Always fails",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        260,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "POST /webhook/p01-fail": {
+      "main": [
+        [
+          {
+            "node": "Always fails",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Africa/Tripoli",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "ALP01ErrorHandle"
+  },
+  "pinData": {},
+  "versionId": "51b37b68-eb62-5d4e-8085-2b937567a7f5",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "description": "Always fails so that P01 fires. Test fixture only."
+  },
+  "id": "ALP01FailingCall",
+  "tags": [
+    {
+      "name": "automation-lab"
+    },
+    {
+      "name": "test"
+    }
+  ]
+}

@@ -86,7 +86,10 @@ def check_readme(path: Path) -> tuple[list[str], list[str]]:
     idm = re.search(r"^id:\s*([A-Z]\d{2})\s*$", fm, re.M)
     if idm and not folder.startswith(idm.group(1) + "-"):
         errors.append(f"front-matter id {idm.group(1)} does not match folder '{folder}'")
-    for section in ("## Problem", "## How it works", "## Setup", "## Try it", "## Notes"):
+    is_pattern = folder.startswith("P")
+    required = (("## Problem", "## Pattern", "## Implementation", "## Trade-offs", "## Used by") if is_pattern
+                else ("## Problem", "## How it works", "## Setup", "## Try it", "## Notes"))
+    for section in required:
         if section not in text:
             warnings.append(f"missing section '{section}'")
     return errors, warnings

@@ -1,0 +1,17 @@
+{
+  "_comment": "Output of the 'Normalize error' node for test/input.json (failed_at/execution_url are runtime values).",
+  "execution_id": "231",
+  "execution_mode": "trigger",
+  "workflow_id": "ALT01WebhookToDa",
+  "workflow_name": "T01 - Webhook to Database",
+  "error_message": "connect ECONNREFUSED 172.20.0.9:8080",
+  "error_node": "Fetch products",
+  "severity": "warning",
+  "subject": "[Automation Lab] WARNING in T01 - Webhook to Database at node \"Fetch products\"",
+  "side_effects": {
+    "execution_log": "1 row, status=error",
+    "redis": "p01:alerts:ALT01WebhookToDa incremented, TTL 600 s",
+    "email": "sent to ops@lab.local only when the counter is 1",
+    "notifications": "1 row when the e-mail was sent"
+  }
+}

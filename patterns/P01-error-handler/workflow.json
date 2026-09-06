@@ -1,0 +1,341 @@
+{
+  "name": "P01 - Global Error Handler",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "0afa0e7d-bd29-582e-bbe9-29d048aadaa3",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Error Trigger emits one item. Two shapes exist: a node failed inside an execution (execution.*) or a trigger\n// failed to start one (trigger.*). Normalise both into a flat record that every downstream node can use.\nconst src = $input.first().json;\nconst exec = src.execution || {};\nconst trig = src.trigger || {};\nconst wfl = src.workflow || {};\nconst err = exec.error || trig.error || {};\nconst message = String(err.message || err.description || 'unknown error').slice(0, 500);\nconst stack = String(err.stack || '').split('\\n').slice(0, 12).join('\\n');\nconst node = exec.lastNodeExecuted || (err.node && err.node.name) || (trig.mode ? 'trigger' : 'unknown');\nconst startedAt = exec.startedAt || trig.startedAt || null;\nconst now = new Date();\nconst severity = /ECONNREFUSED|ETIMEDOUT|429|503|timeout/i.test(message) ? 'warning' : 'error';\nreturn [{ json: {\n  execution_id: String(exec.id || trig.id || `trigger-${now.getTime()}`),\n  execution_url: exec.url || '',\n  execution_mode: exec.mode || trig.mode || 'unknown',\n  workflow_id: String(wfl.id || ''),\n  workflow_name: wfl.name || 'unknown workflow',\n  error_message: message,\n  error_node: String(node),\n  error_stack: stack,\n  started_at: startedAt,\n  failed_at: now.toISOString(),\n  severity,\n  subject: `[Automation Lab] ${severity.toUpperCase()} in ${wfl.name || 'workflow'} at node \"${node}\"`,\n}}];"
+      },
+      "id": "600d260d-5ec0-5c6a-bed6-3ad6a80d9d8b",
+      "name": "Normalize error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        260,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "schema": {
+          "__rl": true,
+          "value": "public",
+          "mode": "list"
+        },
+        "table": {
+          "__rl": true,
+          "value": "execution_log",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "execution_id": "={{ $json.execution_id }}",
+            "workflow_id": "={{ $json.workflow_id }}",
+            "workflow_name": "={{ $json.workflow_name }}",
+            "status": "error",
+            "started_at": "={{ $json.started_at }}",
+            "finished_at": "={{ $json.failed_at }}",
+            "error_message": "={{ $json.error_message }}",
+            "error_node": "={{ $json.error_node }}"
+          },
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "461a4551-487d-5f0a-b87b-24b8c0fbd73b",
+      "name": "Log to execution_log",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        520,
+        0
+      ],
+      "notes": "Logging must never block the alert: continue on error.",
+      "notesInFlow": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "postgres": {
+          "id": "ALcredPostgresDm",
+          "name": "Postgres - demo"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "incr",
+        "key": "=p01:alerts:{{ $('Normalize error').item.json.workflow_id || 'unknown' }}",
+        "expire": true,
+        "ttl": 600
+      },
+      "id": "f77cf54b-a848-5b7b-baab-5c1a094826ba",
+      "name": "Alert-storm guard (INCR)",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        780,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "redis": {
+          "id": "ALcredRedisLocal",
+          "name": "Redis - local"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c3dda959-4871-59d0-a607-a767cf9fe463",
+              "leftValue": "={{ Number(Object.values($json)[0]) }}",
+              "rightValue": 1,
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "b1332c7c-6403-51d8-9c90-52daa9f19051",
+      "name": "First alert in 10 min?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1040,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "automation-lab@lab.local",
+        "toEmail": "ops@lab.local",
+        "subject": "={{ $('Normalize error').item.json.subject }}",
+        "options": {},
+        "emailFormat": "html",
+        "html": "=<h2 style=\"font-family:sans-serif\">{{ $('Normalize error').item.json.subject }}</h2>\n<table style=\"font-family:sans-serif;border-collapse:collapse\" cellpadding=\"6\">\n<tr><td><b>Workflow</b></td><td>{{ $('Normalize error').item.json.workflow_name }} ({{ $('Normalize error').item.json.workflow_id }})</td></tr>\n<tr><td><b>Execution</b></td><td><a href=\"{{ $('Normalize error').item.json.execution_url }}\">{{ $('Normalize error').item.json.execution_id }}</a> · mode {{ $('Normalize error').item.json.execution_mode }}</td></tr>\n<tr><td><b>Failed node</b></td><td>{{ $('Normalize error').item.json.error_node }}</td></tr>\n<tr><td><b>When</b></td><td>{{ $('Normalize error').item.json.failed_at }}</td></tr>\n<tr><td><b>Message</b></td><td><code>{{ $('Normalize error').item.json.error_message }}</code></td></tr>\n</table>\n<pre style=\"background:#f4f4f4;padding:8px\">{{ $('Normalize error').item.json.error_stack }}</pre>\n<p style=\"color:#888\">Further failures of this workflow are logged to execution_log but not e-mailed for 10 minutes (alert-storm guard).</p>"
+      },
+      "id": "3ad7324a-25d2-54ec-9164-0939e795d876",
+      "name": "Email ops (Mailpit)",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        1300,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "smtp": {
+          "id": "ALcredSmtpMailpt",
+          "name": "SMTP - Mailpit"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "schema": {
+          "__rl": true,
+          "value": "public",
+          "mode": "list"
+        },
+        "table": {
+          "__rl": true,
+          "value": "notifications",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "channel": "email",
+            "target": "ops@lab.local",
+            "subject": "={{ $('Normalize error').item.json.subject }}",
+            "body": "={{ $('Normalize error').item.json.error_message }}",
+            "severity": "={{ $('Normalize error').item.json.severity }}",
+            "sent_at": "={{ $now.toISO() }}"
+          },
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "33de39dc-a752-5714-a785-47f5a3bf36f5",
+      "name": "Record notification",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1560,
+        0
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "postgres": {
+          "id": "ALcredPostgresDm",
+          "name": "Postgres - demo"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "8a3d47c7-93b1-5e2f-9174-6497796b92d7",
+      "name": "Suppressed (storm)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1300,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## P01 - Global Error Handler\nSet `Settings -> Error workflow` of every workflow to this one.\n\n1. **Normalize** both error shapes (node failure / trigger failure)\n2. **execution_log** row (never blocks the alert)\n3. **Redis INCR** per workflow, TTL 10 min: only the first failure e-mails\n4. **Mailpit** e-mail + `notifications` row\n\nOptional: add a Telegram node next to the e-mail (credential `Telegram - bot`).",
+        "height": 260,
+        "width": 560,
+        "color": 4
+      },
+      "id": "3224f5f5-2a39-530a-89c4-a77b49483e2b",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -40,
+        -330
+      ]
+    }
+  ],
+  "connections": {
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Normalize error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize error": {
+      "main": [
+        [
+          {
+            "node": "Log to execution_log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log to execution_log": {
+      "main": [
+        [
+          {
+            "node": "Alert-storm guard (INCR)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Alert-storm guard (INCR)": {
+      "main": [
+        [
+          {
+            "node": "First alert in 10 min?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "First alert in 10 min?": {
+      "main": [
+        [
+          {
+            "node": "Email ops (Mailpit)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Suppressed (storm)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email ops (Mailpit)": {
+      "main": [
+        [
+          {
+            "node": "Record notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Africa/Tripoli",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "pinData": {},
+  "versionId": "c2583e91-2565-57c9-9267-f310c81e0eca",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "description": "Catches failures from every workflow, logs them and alerts once per 10 minutes."
+  },
+  "id": "ALP01ErrorHandle",
+  "tags": [
+    {
+      "name": "automation-lab"
+    },
+    {
+      "name": "pattern"
+    },
+    {
+      "name": "P01"
+    }
+  ]
+}
