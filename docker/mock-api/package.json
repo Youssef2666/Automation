@@ -1,0 +1,14 @@
+{
+  "name": "automation-lab-mock-api",
+  "version": "1.0.0",
+  "private": true,
+  "description": "json-server + a few middlewares that simulate real-world API behaviour (pagination, flaky, rate limits, RSS, HTML catalog, FX rates).",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "json-server": "0.17.4"
+  },
+  "license": "MIT"
+}

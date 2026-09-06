@@ -44,12 +44,19 @@ def staged_env_files() -> list[str]:
         return []
 
 
+HEAD_ONLY = ("do not print .env", "do not write .env")
+
+
 def main() -> None:
     p = read_payload()
     cmd = (p.get("tool_input", {}) or {}).get("command", "") or ""
     flat = " ".join(cmd.split())
+    # Heredoc bodies legitimately mention .env in prose; the cat/redirect rules only look at the command line
+    # itself (everything before the first newline), the destructive-command rules look at the whole text.
+    head = " ".join(cmd.split("\n", 1)[0].split())
     for pat, why in RULES:
-        if pat.search(flat):
+        target = head if why.startswith(HEAD_ONLY) else flat
+        if pat.search(target):
             deny(f"Blocked command ({why})\n  $ {cmd.strip()[:200]}")
     if re.search(r"\bgit\s+commit\b", flat):
         bad = staged_env_files()

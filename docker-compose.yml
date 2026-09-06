@@ -1,0 +1,314 @@
+# Automation Lab - local stack
+#
+#   docker compose --profile core up -d                        # n8n + postgres + redis + mail + minio + mock-api
+#   docker compose --profile core --profile docs up -d         # + docgen (PDF/DOCX/PPTX/OCR)
+#   docker compose --profile core --profile ai up -d           # + ollama + qdrant + whisper
+#   docker compose --profile core --profile observability up -d# + metabase
+#
+# The compose file lives at the repo root so `docker compose` picks up ./.env automatically.
+# Service build contexts and init scripts live under ./docker/.
+
+name: automation-lab
+
+x-n8n-env: &n8n-env
+  DB_TYPE: postgresdb
+  DB_POSTGRESDB_HOST: postgres
+  DB_POSTGRESDB_PORT: 5432
+  DB_POSTGRESDB_DATABASE: ${POSTGRES_DB:-n8n}
+  DB_POSTGRESDB_USER: ${POSTGRES_USER:-n8n}
+  DB_POSTGRESDB_PASSWORD: ${POSTGRES_PASSWORD:-n8n}
+  N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY:-}
+  N8N_HOST: ${N8N_HOST:-localhost}
+  N8N_PORT: 5678
+  N8N_PROTOCOL: http
+  N8N_EDITOR_BASE_URL: http://${N8N_HOST:-localhost}:${N8N_PORT:-5678}/
+  WEBHOOK_URL: http://${N8N_HOST:-localhost}:${N8N_PORT:-5678}/
+  GENERIC_TIMEZONE: ${GENERIC_TIMEZONE:-Africa/Tripoli}
+  TZ: ${GENERIC_TIMEZONE:-Africa/Tripoli}
+  N8N_LOG_LEVEL: ${N8N_LOG_LEVEL:-info}
+  # --- security posture for a local lab (see docs/security.md) ---
+  N8N_SECURE_COOKIE: "false"               # plain http://localhost
+  N8N_BLOCK_ENV_ACCESS_IN_NODE: "true"     # workflows must not read container env
+  N8N_RESTRICT_FILE_ACCESS_TO: /home/node/.n8n-files
+  N8N_BLOCK_FILE_ACCESS_TO_N8N_FILES: "true"
+  NODES_EXCLUDE: '["n8n-nodes-base.executeCommand"]'   # keep Execute Command off, re-enable Local File Trigger
+  N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS: "false"
+  # --- quieter, offline-friendly ---
+  N8N_DIAGNOSTICS_ENABLED: "false"
+  N8N_PERSONALIZATION_ENABLED: "false"
+  N8N_VERSION_NOTIFICATIONS_ENABLED: "false"
+  N8N_HIRING_BANNER_ENABLED: "false"
+  N8N_TEMPLATES_ENABLED: "false"
+  # --- executions ---
+  EXECUTIONS_MODE: ${EXECUTIONS_MODE:-regular}
+  QUEUE_BULL_REDIS_HOST: ${REDIS_HOST:-redis}
+  QUEUE_BULL_REDIS_PORT: ${REDIS_PORT:-6379}
+  EXECUTIONS_DATA_PRUNE: "true"
+  EXECUTIONS_DATA_MAX_AGE: 168
+  EXECUTIONS_DATA_SAVE_ON_SUCCESS: all
+  EXECUTIONS_DATA_SAVE_ON_ERROR: all
+  EXECUTIONS_DATA_SAVE_MANUAL_EXECUTIONS: "true"
+  N8N_DEFAULT_BINARY_DATA_MODE: filesystem
+  N8N_RUNNERS_MODE: internal
+
+x-n8n-volumes: &n8n-volumes
+  - n8n_data:/home/node/.n8n
+  - ./seed/files:/home/node/.n8n-files/seed:ro
+  - ./data:/home/node/.n8n-files/data
+  - ./docs:/home/node/.n8n-files/docs:ro
+  - ./patterns:/home/node/.n8n-files/patterns:ro
+  - ./workflows:/repo/workflows:ro
+  - ./patterns:/repo/patterns:ro
+
+services:
+  # ------------------------------------------------------------------ core ----
+  n8n:
+    image: n8nio/n8n:2.37.10
+    profiles: ["core"]
+    restart: unless-stopped
+    ports:
+      - "${N8N_PORT:-5678}:5678"
+    environment:
+      <<: *n8n-env
+    volumes: *n8n-volumes
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:5678/healthz >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  postgres:
+    image: postgres:17-alpine
+    profiles: ["core"]
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-n8n}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-n8n}
+      POSTGRES_DB: ${POSTGRES_DB:-n8n}
+      DEMO_DB: ${DEMO_DB:-demo}
+      TZ: ${GENERIC_TIMEZONE:-Africa/Tripoli}
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+      - ./seed:/seed:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-n8n} -d ${POSTGRES_DB:-n8n}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    profiles: ["core"]
+    restart: unless-stopped
+    command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  mailpit:
+    image: axllent/mailpit:v1.31.1
+    profiles: ["core"]
+    restart: unless-stopped
+    ports:
+      - "8025:8025"   # web UI + REST API
+      - "1025:1025"   # SMTP
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: "1"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "1"
+      MP_DATABASE: /data/mailpit.db
+      MP_MAX_MESSAGES: 2000
+      TZ: ${GENERIC_TIMEZONE:-Africa/Tripoli}
+    volumes:
+      - mailpit_data:/data
+
+  greenmail:
+    # IMAP inbox for email-triggered workflows (Mailpit exposes SMTP/POP3 but no IMAP).
+    image: greenmail/standalone:2.1.13
+    profiles: ["core"]
+    restart: unless-stopped
+    ports:
+      - "3025:3025"   # SMTP (send mail INTO the inbox)
+      - "3143:3143"   # IMAP (n8n reads from here)
+    environment:
+      GREENMAIL_OPTS: >-
+        -Dgreenmail.setup.test.smtp -Dgreenmail.setup.test.imap
+        -Dgreenmail.hostname=0.0.0.0 -Dgreenmail.auth.disabled
+        -Dgreenmail.users=inbox:inbox@lab.local,support:support@lab.local
+      JAVA_OPTS: -Xmx192m
+
+  minio:
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    profiles: ["core"]
+    restart: unless-stopped
+    command: ["server", "/data", "--console-address", ":9001"]
+    ports:
+      - "9000:9000"   # S3 API
+      - "9001:9001"   # console
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  minio-init:
+    image: minio/mc:RELEASE.2025-08-13T08-35-41Z
+    profiles: ["core"]
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        mc alias set local http://minio:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" &&
+        mc mb --ignore-existing local/backups local/artifacts local/reports &&
+        echo "buckets ready"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    restart: "no"
+
+  mock-api:
+    build: ./docker/mock-api
+    image: automation-lab/mock-api:local
+    profiles: ["core"]
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  # ------------------------------------------------------------------ docs ----
+  docgen:
+    build: ./docker/docgen
+    image: automation-lab/docgen:local
+    profiles: ["docs"]
+    restart: unless-stopped
+    ports:
+      - "8090:8090"
+    volumes:
+      - ./data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request;urllib.request.urlopen('http://localhost:8090/health')\" || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  # -------------------------------------------------------------------- ai ----
+  ollama:
+    image: ollama/ollama:0.33.3
+    profiles: ["ai"]
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_models:/root/.ollama
+    environment:
+      OLLAMA_KEEP_ALIVE: 30m
+      OLLAMA_NUM_PARALLEL: 1
+
+  ollama-pull:
+    image: ollama/ollama:0.33.3
+    profiles: ["ai"]
+    depends_on:
+      - ollama
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.2:3b}
+      OLLAMA_EMBED_MODEL: ${OLLAMA_EMBED_MODEL:-nomic-embed-text}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        sleep 5;
+        until ollama list >/dev/null 2>&1; do echo "waiting for ollama..."; sleep 3; done;
+        ollama pull "$OLLAMA_MODEL" && ollama pull "$OLLAMA_EMBED_MODEL" && echo "models ready"
+    restart: "no"
+
+  qdrant:
+    image: qdrant/qdrant:v1.19.1
+    profiles: ["ai"]
+    restart: unless-stopped
+    ports:
+      - "6333:6333"
+    volumes:
+      - qdrant_data:/qdrant/storage
+
+  whisper:
+    image: onerahmet/openai-whisper-asr-webservice:v1.10.0
+    profiles: ["ai"]
+    restart: unless-stopped
+    ports:
+      - "9010:9000"
+    environment:
+      ASR_MODEL: ${WHISPER_MODEL:-base}
+      ASR_ENGINE: faster_whisper
+    volumes:
+      - whisper_cache:/root/.cache
+
+  # ---------------------------------------------------------- observability ----
+  metabase:
+    image: metabase/metabase:v0.63.16.6
+    profiles: ["observability"]
+    restart: unless-stopped
+    ports:
+      - "${METABASE_PORT:-3001}:3000"
+    environment:
+      MB_DB_FILE: /metabase-data/metabase.db
+      MB_SITE_LOCALE: en
+      JAVA_OPTS: -Xmx1g
+      TZ: ${GENERIC_TIMEZONE:-Africa/Tripoli}
+    volumes:
+      - metabase_data:/metabase-data
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # ----------------------------------------------------------------- queue ----
+  n8n-worker:
+    image: n8nio/n8n:2.37.10
+    profiles: ["queue"]
+    restart: unless-stopped
+    command: worker
+    environment:
+      <<: *n8n-env
+      EXECUTIONS_MODE: queue
+    volumes: *n8n-volumes
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  n8n_data:
+  pg_data:
+  redis_data:
+  mailpit_data:
+  minio_data:
+  ollama_models:
+  qdrant_data:
+  whisper_cache:
+  metabase_data:

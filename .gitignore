@@ -1,0 +1,42 @@
+# secrets
+.env
+.env.*
+!.env.example
+
+# runtime data mounted into containers
+data/*
+!data/.gitkeep
+!data/inbox/
+data/inbox/*
+!data/inbox/.gitkeep
+!data/out/
+data/out/*
+!data/out/.gitkeep
+!data/export/
+data/export/*
+!data/export/.gitkeep
+
+# claude code local state
+.claude/settings.local.json
+.claude/state/
+
+# python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+
+# node
+node_modules/
+
+# editors / os
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# build artefacts
+*.log
+dist/
+tmp/

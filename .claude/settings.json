@@ -71,8 +71,7 @@
   },
   "env": {
     "PYTHONUTF8": "1",
-    "PYTHONIOENCODING": "utf-8",
-    "COMPOSE_FILE": "docker/docker-compose.yml"
+    "PYTHONIOENCODING": "utf-8"
   },
   "hooks": {
     "SessionStart": [
