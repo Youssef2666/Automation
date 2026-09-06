@@ -1,0 +1,9 @@
+external_id,name,email,phone,company,country,city,segment
+SMP-0001,Lina Haddad,lina.haddad@lab.local,+218 91 000 0001,Sample Bakery,Libya,Tripoli,smb
+SMP-0002,Youssef Karim,youssef.karim@lab.local,+218 91 000 0002,Sample Bakery,Libya,Benghazi,mid
+SMP-0003,Nadia Salem,nadia.salem-at-lab.local,+218 91 000 0003,Harbor Prints,Libya,Misrata,smb
+SMP-0004,,rami.fathi@lab.local,+218 91 000 0004,Harbor Prints,Libya,Tripoli,enterprise
+SMP-0005,Hana Zaid,hana.zaid@lab.local,+218 91 000 0005,Desert Logistics,Libya,Sabha,enterprise
+SMP-0001,Lina Haddad,lina.haddad@lab.local,+218 91 000 0001,Sample Bakery,Libya,Tripoli,smb
+SMP-0006,Amir Sultan,amir.sultan@lab.local,+218 91 000 0006,Desert Logistics,Libya,Tripoli,gold
+SMP-0007,Sara Nour,sara.nour@lab.local,+218 91 000 0007,Blue Olive Foods,Libya,Zawiya,mid

@@ -1124,10 +1124,12 @@ def _rezip_fixed_time(data: bytes, path: Path) -> None:
             dst.writestr(zi, blob)
 
 
-def write_xlsx(path: Path, ds: dict[str, Any], opt: Optional) -> str:
+def write_xlsx(path: Path, ds: dict[str, Any], opt: Optional,
+               sheets: list[tuple[str, list[str], list[dict[str, Any]]]] | None = None) -> str:
     orders_cols = ["order_number", "customer_external_id", "status", "currency", "total", "ordered_at"]
     items_cols = ["order_number", "sku", "qty", "unit_price"]
-    sheets = [("Orders", orders_cols, ds["xlsx_orders"]), ("Items", items_cols, ds["xlsx_items"])]
+    if sheets is None:
+        sheets = [("Orders", orders_cols, ds["xlsx_orders"]), ("Items", items_cols, ds["xlsx_items"])]
     if opt.mod("openpyxl"):
         from openpyxl import Workbook  # type: ignore
         wb = Workbook()
@@ -1694,6 +1696,10 @@ def main(argv: list[str] | None = None) -> int:
         files_dir.mkdir(parents=True, exist_ok=True)
         notes = []
         notes.append(("orders.xlsx", write_xlsx(files_dir / "orders.xlsx", ds, opt)))
+        # Same rows (and the same 3 broken ones) as customers.csv, for the XLSX branch of D01.
+        cust_cols = ["external_id", "name", "email", "phone", "company", "country", "city", "segment"]
+        notes.append(("customers.xlsx", write_xlsx(files_dir / "customers.xlsx", ds, opt,
+                                                   sheets=[("Customers", cust_cols, ds["csv_customers"])])))
         notes.append(("invoice-locked.pdf", write_pdf(files_dir / "invoice-locked.pdf", opt)))
         notes.append(("receipt-*.png", write_receipts(files_dir, opt)))
         notes.append(("meeting-clip.wav", write_wav(files_dir / "meeting-clip.wav")))

@@ -69,26 +69,26 @@ current screenshot and passes `scripts/validate.py` (see [CONTRIBUTING.md](CONTR
 
 Generated from each folder's README front-matter. Do not edit between the markers.
 
-<!-- STATS:START -->**2 of 36 workflows shipped · 3 of 8 patterns**<!-- STATS:END -->
+<!-- STATS:START -->**4 of 36 workflows shipped · 3 of 8 patterns**<!-- STATS:END -->
 
 <!-- MATRIX:START -->
-### Triggers (2/7 shipped)
+### Triggers (3/7 shipped)
 
 | ID | Workflow | Difficulty | Patterns | Services | Status |
 |---|---|---|---|---|---|
 | T01 | [Webhook to Database](workflows/T01-webhook-to-database/) | Beginner | [P01](patterns/P01-error-handler/), [P03](patterns/P03-idempotency/) | core | ✅ shipped |
-| T02 | Scheduled Daily Digest | Beginner | - | - | 📋 planned |
+| T02 | [Scheduled Daily Digest](workflows/T02-daily-digest/) | Beginner | [P01](patterns/P01-error-handler/) | core | ✅ shipped |
 | T03 | [Polling an API Without Webhooks](workflows/T03-api-polling/) | Intermediate | [P01](patterns/P01-error-handler/), [P02](patterns/P02-retry-backoff/) | core | ✅ shipped |
 | T04 | IMAP Email Trigger to Attachment Parser | Intermediate | - | - | 📋 planned |
 | T05 | Form Trigger to Record and Confirmation Email | Beginner | - | - | 📋 planned |
 | T06 | File Watcher: Process on Drop | Beginner | - | - | 📋 planned |
 | T07 | Telegram Chat Trigger to Command Router | Intermediate | - | - | 📋 planned |
 
-### Data & ETL (0/5 shipped)
+### Data & ETL (1/5 shipped)
 
 | ID | Workflow | Difficulty | Patterns | Services | Status |
 |---|---|---|---|---|---|
-| D01 | CSV/XLSX Import with Row-level Validation | Intermediate | - | - | 📋 planned |
+| D01 | [CSV/XLSX Import with Row-level Validation](workflows/D01-csv-import-validation/) | Intermediate | [P01](patterns/P01-error-handler/) | core | ✅ shipped |
 | D02 | Web Scrape to Structured JSON | Intermediate | - | - | 📋 planned |
 | D03 | Multi-source API Aggregation | Advanced | - | - | 📋 planned |
 | D04 | Incremental Sync with Upsert and Dedupe | Advanced | - | - | 📋 planned |
@@ -151,7 +151,7 @@ Each pattern documents a failure story, the rule, its n8n implementation, the tr
 <!-- PATTERNS:START -->
 | ID | Pattern | Used by | Status |
 |---|---|---|---|
-| P01 | [Global Error Handler](patterns/P01-error-handler/) | [T01](workflows/T01-webhook-to-database/), [T03](workflows/T03-api-polling/) | ✅ shipped |
+| P01 | [Global Error Handler](patterns/P01-error-handler/) | [D01](workflows/D01-csv-import-validation/), [T01](workflows/T01-webhook-to-database/), [T02](workflows/T02-daily-digest/), [T03](workflows/T03-api-polling/) | ✅ shipped |
 | P02 | [Retry with Exponential Backoff](patterns/P02-retry-backoff/) | [T03](workflows/T03-api-polling/) | ✅ shipped |
 | P03 | [Idempotency](patterns/P03-idempotency/) | [T01](workflows/T01-webhook-to-database/) | ✅ shipped |
 | P04 | Rate Limiting and Batching | - | 📋 planned |

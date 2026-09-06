@@ -1,0 +1,354 @@
+{
+  "name": "T02 - Scheduled Daily Digest",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 7 * * *"
+            }
+          ]
+        }
+      },
+      "id": "5530bcb7-a19a-56f8-b182-1e39299b7ddd",
+      "name": "Every day 07:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "4833822c-ae92-533b-92f3-c18bde91c465",
+      "name": "Run once (manual / CLI)",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "8f515edc-9d54-5167-840b-407008030f38",
+              "name": "lookback_days",
+              "value": 30,
+              "type": "number"
+            },
+            {
+              "id": "c72665d2-c1ba-50d0-b673-711ea6987db0",
+              "name": "report_to",
+              "value": "ops@lab.local",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "e9ddda7d-5ddd-5d90-beab-9713f3716152",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        260,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select status, count(*)::int as orders, coalesce(sum(total), 0)::float as revenue\nfrom orders\nwhere ordered_at >= now() - ($1::int * interval '1 day')\ngroup by status\norder by status",
+        "options": {
+          "queryReplacement": "={{ $('Config').item.json.lookback_days }}"
+        }
+      },
+      "id": "cc311007-e3af-5000-9280-0289898fae39",
+      "name": "Orders by status",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        520,
+        0
+      ],
+      "alwaysOutputData": true,
+      "executeOnce": true,
+      "credentials": {
+        "postgres": {
+          "id": "ALcredPostgresDm",
+          "name": "Postgres - demo"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select priority, count(*)::int as open_tickets,\n       round(extract(epoch from (now() - min(created_at))) / 3600)::int as oldest_hours,\n       count(*) filter (where sla_due_at < now())::int as sla_breached\nfrom tickets\nwhere status in ('open', 'triaged', 'in_progress')\ngroup by priority\norder by case priority when 'urgent' then 0 when 'high' then 1 when 'medium' then 2 else 3 end",
+        "options": {}
+      },
+      "id": "8cdc38b5-25a7-542f-a841-415e1bab72b8",
+      "name": "Open tickets by priority",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        780,
+        0
+      ],
+      "alwaysOutputData": true,
+      "executeOnce": true,
+      "credentials": {
+        "postgres": {
+          "id": "ALcredPostgresDm",
+          "name": "Postgres - demo"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select count(*)::int as new_customers,\n       count(*) filter (where segment = 'enterprise')::int as enterprise\nfrom customers\nwhere created_at >= now() - ($1::int * interval '1 day')",
+        "options": {
+          "queryReplacement": "={{ $('Config').item.json.lookback_days }}"
+        }
+      },
+      "id": "c13e9e80-ca3c-5a57-bdbd-265faf718b27",
+      "name": "New customers",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1040,
+        0
+      ],
+      "alwaysOutputData": true,
+      "executeOnce": true,
+      "credentials": {
+        "postgres": {
+          "id": "ALcredPostgresDm",
+          "name": "Postgres - demo"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build one digest item from the three summary nodes (each ran once, executeOnce).\nconst cfg = $('Config').first().json;\nconst orders = $('Orders by status').all().map(i => i.json);\nconst tickets = $('Open tickets by priority').all().map(i => i.json);\nconst cust = ($('New customers').first() || { json: {} }).json;\nconst day = $now.setZone('Africa/Tripoli').toFormat('yyyy-LL-dd');\nconst money = (n) => Number(n || 0).toLocaleString('en-US', { style: 'currency', currency: 'USD' });\nconst totalOrders = orders.reduce((a, r) => a + Number(r.orders || 0), 0);\nconst totalRevenue = orders.filter(r => ['paid', 'shipped'].includes(r.status)).reduce((a, r) => a + Number(r.revenue || 0), 0);\nconst openTickets = tickets.reduce((a, r) => a + Number(r.open_tickets || 0), 0);\nconst breached = tickets.reduce((a, r) => a + Number(r.sla_breached || 0), 0);\nconst empty = totalOrders === 0 && openTickets === 0 && Number(cust.new_customers || 0) === 0;\n\nconst rows = (list, cols) => list.length\n  ? list.map(r => '<tr>' + cols.map(c => `<td style=\"padding:4px 10px;border-bottom:1px solid #eee\">${r[c] ?? ''}</td>`).join('') + '</tr>').join('')\n  : `<tr><td colspan=\"${cols.length}\" style=\"padding:4px 10px;color:#888\">nothing in the window</td></tr>`;\nconst table = (title, list, cols, headers) => `\n<h3 style=\"margin:18px 0 6px\">${title}</h3>\n<table style=\"border-collapse:collapse;font-size:14px\"><tr>${headers.map(h => `<th align=\"left\" style=\"padding:4px 10px;border-bottom:2px solid #333\">${h}</th>`).join('')}</tr>${rows(list, cols)}</table>`;\n\nconst html = `<div style=\"font-family:sans-serif;max-width:720px\">\n<h2>Daily digest - ${day}</h2>\n<p>Window: last <b>${cfg.lookback_days}</b> day(s). ${empty ? '<b>Nothing to report.</b>' : ''}</p>\n<p><b>${totalOrders}</b> orders, <b>${money(totalRevenue)}</b> paid/shipped revenue · <b>${openTickets}</b> open tickets\n(<b>${breached}</b> past SLA) · <b>${cust.new_customers || 0}</b> new customers (${cust.enterprise || 0} enterprise)</p>\n${table('Orders by status', orders.map(r => ({ ...r, revenue: money(r.revenue) })), ['status', 'orders', 'revenue'], ['Status', 'Orders', 'Revenue'])}\n${table('Open tickets by priority', tickets, ['priority', 'open_tickets', 'oldest_hours', 'sla_breached'], ['Priority', 'Open', 'Oldest (h)', 'Past SLA'])}\n<p style=\"color:#888;font-size:12px\">Sent by T02 - Scheduled Daily Digest (Automation Lab). Timezone Africa/Tripoli.</p>\n</div>`;\n\nconst text = [`Daily digest - ${day} (last ${cfg.lookback_days} days)`,\n  `${totalOrders} orders, ${money(totalRevenue)} paid/shipped revenue`,\n  `${openTickets} open tickets, ${breached} past SLA`,\n  `${cust.new_customers || 0} new customers`,\n  ...orders.map(r => `  order ${r.status}: ${r.orders} (${money(r.revenue)})`),\n  ...tickets.map(r => `  tickets ${r.priority}: ${r.open_tickets} open, oldest ${r.oldest_hours} h, ${r.sla_breached} past SLA`),\n].join('\\n');\n\nreturn [{ json: {\n  subject: `[Automation Lab] Daily digest ${day}${empty ? ' - nothing to report' : ''}`,\n  to: cfg.report_to, html, text, day, empty,\n  totals: { orders: totalOrders, revenue: totalRevenue, open_tickets: openTickets, sla_breached: breached,\n            new_customers: Number(cust.new_customers || 0) },\n}}];"
+      },
+      "id": "027c9257-64c1-563d-9c63-689eac70709d",
+      "name": "Render digest",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1300,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "automation-lab@lab.local",
+        "toEmail": "={{ $json.to }}",
+        "subject": "={{ $json.subject }}",
+        "options": {},
+        "emailFormat": "html",
+        "html": "={{ $json.html }}"
+      },
+      "id": "11d4c7c3-2039-5ca2-9c89-7c928433c93a",
+      "name": "Send digest (Mailpit)",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        1560,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "smtp": {
+          "id": "ALcredSmtpMailpt",
+          "name": "SMTP - Mailpit"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "schema": {
+          "__rl": true,
+          "value": "public",
+          "mode": "list"
+        },
+        "table": {
+          "__rl": true,
+          "value": "notifications",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "channel": "email",
+            "target": "={{ $('Render digest').item.json.to }}",
+            "subject": "={{ $('Render digest').item.json.subject }}",
+            "body": "={{ $('Render digest').item.json.text }}",
+            "severity": "info",
+            "sent_at": "={{ $now.toISO() }}"
+          },
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "dceed4c4-f915-50c6-8ebe-97ebecc0317d",
+      "name": "Record notification",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1820,
+        0
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "postgres": {
+          "id": "ALcredPostgresDm",
+          "name": "Postgres - demo"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "## T02 - Daily digest\nCron `0 7 * * *` evaluated in the **workflow timezone** (Settings -> Timezone = Africa/Tripoli), so 07:00 local, DST-safe.\n\n`Config` holds the lookback window (30 days, because the seed data is dated around 2026-09-01) and the recipient. The three queries run once each (Execute Once) and the Code node renders HTML + text.\n\nCheck Mailpit at http://localhost:8025 and the `notifications` table.",
+        "height": 230,
+        "width": 640,
+        "color": 4
+      },
+      "id": "3e046f7b-a15a-51a6-a293-55db2b142c03",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -40,
+        -330
+      ]
+    }
+  ],
+  "connections": {
+    "Every day 07:00": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "Orders by status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Orders by status": {
+      "main": [
+        [
+          {
+            "node": "Open tickets by priority",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Open tickets by priority": {
+      "main": [
+        [
+          {
+            "node": "New customers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "New customers": {
+      "main": [
+        [
+          {
+            "node": "Render digest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Render digest": {
+      "main": [
+        [
+          {
+            "node": "Send digest (Mailpit)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send digest (Mailpit)": {
+      "main": [
+        [
+          {
+            "node": "Record notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run once (manual / CLI)": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Africa/Tripoli",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "ALP01ErrorHandle"
+  },
+  "pinData": {},
+  "versionId": "e4972e63-7037-55ea-be4e-0dde30d23649",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "description": "Timezone-aware 07:00 cron that e-mails an orders/tickets/customers digest."
+  },
+  "id": "ALT02DailyDigest",
+  "tags": [
+    {
+      "name": "automation-lab"
+    },
+    {
+      "name": "Triggers"
+    }
+  ]
+}

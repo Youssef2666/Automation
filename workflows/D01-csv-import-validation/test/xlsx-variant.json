@@ -1,0 +1,511 @@
+{
+  "name": "D01 - CSV/XLSX Import (XLSX test variant)",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "acf3571c-da29-5a53-ac49-f16ca9525abe",
+      "name": "Run once (manual / CLI)",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "9b8545e4-97f8-5b44-b8f2-bae4a8819030",
+              "name": "file",
+              "value": "/home/node/.n8n-files/seed/customers.xlsx",
+              "type": "string"
+            },
+            {
+              "id": "89c407d7-d0eb-51e0-b85e-5cdb3f24ba4d",
+              "name": "format",
+              "value": "xlsx",
+              "type": "string"
+            },
+            {
+              "id": "c4ba81de-54fd-522a-b7da-d6ae8ba57f5c",
+              "name": "report_to",
+              "value": "ops@lab.local",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "d5eb93f7-1aa5-5218-8278-eff65e2999a3",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        260,
+        0
+      ],
+      "notes": "Point `file` at /home/node/.n8n-files/data/inbox/<your file> and set format csv|xlsx.",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "fileSelector": "={{ $json.file }}",
+        "options": {
+          "dataPropertyName": "data"
+        }
+      },
+      "id": "dde49bd5-ab8b-5e44-9997-27e93934f958",
+      "name": "Read file",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        520,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "a22ed1fe-2430-5944-9e30-ca57b214d056",
+              "leftValue": "={{ $('Config').item.json.format }}",
+              "rightValue": "xlsx",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "4325e836-bf06-54a9-affb-bee0b7d9ba64",
+      "name": "XLSX?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        780,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "xlsx",
+        "binaryPropertyName": "data",
+        "options": {
+          "headerRow": true
+        }
+      },
+      "id": "321a1606-61fa-550a-9f8f-7eb9a43b857d",
+      "name": "Extract XLSX",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        1040,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "csv",
+        "binaryPropertyName": "data",
+        "options": {
+          "headerRow": true
+        }
+      },
+      "id": "54276c2b-75f5-5628-a844-cdd088fcd03c",
+      "name": "Extract CSV",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        1040,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// One item per spreadsheet row. Validate each row independently and keep every row (valid or not).\nconst rows = $input.all().map(i => i.json);\nconst seen = new Map();\nconst EMAIL = /^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$/;\nconst SEGMENTS = ['smb', 'mid', 'enterprise'];\nconst clean = (v) => (v === undefined || v === null) ? '' : String(v).trim();\nreturn rows.map((raw, idx) => {\n  const r = {\n    external_id: clean(raw.external_id), name: clean(raw.name), email: clean(raw.email).toLowerCase(),\n    phone: clean(raw.phone), company: clean(raw.company), country: clean(raw.country), city: clean(raw.city),\n    segment: clean(raw.segment).toLowerCase(),\n  };\n  const errors = [];\n  if (!r.external_id) errors.push('external_id missing');\n  if (!r.name) errors.push('name missing');\n  if (!EMAIL.test(r.email)) errors.push(`email invalid: \"${r.email}\"`);\n  if (r.segment && !SEGMENTS.includes(r.segment)) errors.push(`segment not in ${SEGMENTS.join('/')}: \"${r.segment}\"`);\n  if (r.external_id) {\n    if (seen.has(r.external_id)) errors.push(`duplicate external_id (first seen on row ${seen.get(r.external_id)})`);\n    else seen.set(r.external_id, idx + 2);\n  }\n  return { json: { ...r, _row: idx + 2, _valid: errors.length === 0, _errors: errors.join('; ') } };\n});"
+      },
+      "id": "ff7fec86-44b8-5b37-a9a3-39f46a4fccdf",
+      "name": "Validate rows",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1300,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "edb53eee-5e5e-5c84-97d6-eec1291ea25a",
+              "leftValue": "={{ $json._valid }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "130b6379-924a-55cc-9591-aa2e206141b8",
+      "name": "Row valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1560,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "schema": {
+          "__rl": true,
+          "value": "public",
+          "mode": "list"
+        },
+        "table": {
+          "__rl": true,
+          "value": "customers",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "external_id": "={{ $json.external_id }}",
+            "name": "={{ $json.name }}",
+            "email": "={{ $json.email }}",
+            "phone": "={{ $json.phone }}",
+            "company": "={{ $json.company }}",
+            "country": "={{ $json.country }}",
+            "city": "={{ $json.city }}",
+            "segment": "={{ $json.segment || 'smb' }}"
+          },
+          "matchingColumns": [
+            "external_id"
+          ],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "a39c80c5-69e7-538c-b0d3-1c8f916b5d43",
+      "name": "Upsert customers",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1820,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "postgres": {
+          "id": "ALcredPostgresDm",
+          "name": "Postgres - demo"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "destinationFieldName": "data",
+        "options": {}
+      },
+      "id": "5df40ef9-5926-5d63-8ebe-745bb06af5b3",
+      "name": "Collect imported",
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        2080,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Runs once after the valid rows were upserted. Counts come from the validator; the reject branch runs\n// after this node (n8n v1 order executes branches depth-first), so it is not referenced here.\nconst all = $('Validate rows').all().map(i => i.json);\nconst rejected = all.filter(r => !r._valid);\nreturn [{ json: {\n  file: $('Config').first().json.file,\n  rows: all.length,\n  imported: all.length - rejected.length,\n  rejected: rejected.length,\n  reject_rows: rejected.map(r => r._row),\n  reject_errors: rejected.map(r => `row ${r._row}: ${r._errors}`),\n  reject_file: rejected.length ? 'data/out/rejects-<timestamp>.csv (written on the reject branch)' : null,\n}}];"
+      },
+      "id": "c15cabd5-e109-5259-91aa-47e738791216",
+      "name": "Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2340,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "csv",
+        "options": {
+          "fileName": "=rejects-{{ $now.toFormat('yyyyLLdd-HHmmss') }}.csv"
+        }
+      },
+      "id": "15e73517-9c18-510c-90b1-f6336f9492aa",
+      "name": "Rejects to CSV",
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        1820,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "=/home/node/.n8n-files/data/out/{{ $binary.data.fileName }}",
+        "dataPropertyName": "data",
+        "options": {}
+      },
+      "id": "fc91965c-eab3-5df6-88c4-bc06638ed23d",
+      "name": "Write rejects file",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        2080,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "automation-lab@lab.local",
+        "toEmail": "={{ $('Config').item.json.report_to }}",
+        "subject": "=[Automation Lab] D01 import: {{ $('Validate rows').all().filter(i => !i.json._valid).length }} row(s) rejected",
+        "options": {
+          "attachments": "data"
+        },
+        "emailFormat": "html",
+        "html": "=<p>Import of <code>{{ $('Config').item.json.file }}</code>: <b>{{ $('Validate rows').all().filter(i => i.json._valid).length }}</b> rows imported, <b>{{ $('Validate rows').all().filter(i => !i.json._valid).length }}</b> rejected.</p><p>Rejected rows (attached as CSV):</p><ul>{{ $('Validate rows').all().filter(i => !i.json._valid).map(i => '<li>row ' + i.json._row + ': ' + i.json._errors + '</li>').join('') }}</ul>"
+      },
+      "id": "73a461f2-2a9e-5a32-8d19-90164e0d9048",
+      "name": "Email rejects (Mailpit)",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        2340,
+        220
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "smtp": {
+          "id": "ALcredSmtpMailpt",
+          "name": "SMTP - Mailpit"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "## D01 - Row-level import\nReads `customers.csv` (or `customers.xlsx`) from the seed mount, validates **every row on its own** (required fields, e-mail, segment, duplicates inside the file), upserts the good rows on `external_id` and turns the bad ones into `data/out/rejects-<ts>.csv` + an e-mail.\n\nA bad row never blocks the good ones, and re-running is idempotent (upsert).",
+        "height": 210,
+        "width": 620,
+        "color": 4
+      },
+      "id": "c11fd591-d0a0-514e-b758-ed9a85a37d06",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -40,
+        -330
+      ]
+    }
+  ],
+  "connections": {
+    "Run once (manual / CLI)": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "Read file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read file": {
+      "main": [
+        [
+          {
+            "node": "XLSX?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "XLSX?": {
+      "main": [
+        [
+          {
+            "node": "Extract XLSX",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Extract CSV",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract XLSX": {
+      "main": [
+        [
+          {
+            "node": "Validate rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract CSV": {
+      "main": [
+        [
+          {
+            "node": "Validate rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate rows": {
+      "main": [
+        [
+          {
+            "node": "Row valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Row valid?": {
+      "main": [
+        [
+          {
+            "node": "Upsert customers",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Rejects to CSV",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upsert customers": {
+      "main": [
+        [
+          {
+            "node": "Collect imported",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect imported": {
+      "main": [
+        [
+          {
+            "node": "Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rejects to CSV": {
+      "main": [
+        [
+          {
+            "node": "Write rejects file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write rejects file": {
+      "main": [
+        [
+          {
+            "node": "Email rejects (Mailpit)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Africa/Tripoli",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "ALP01ErrorHandle"
+  },
+  "pinData": {},
+  "versionId": "dd140c5d-dffa-5e92-8257-5f7966766e4f",
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "id": "ALD01XlsxVariant",
+  "tags": [
+    {
+      "name": "automation-lab"
+    },
+    {
+      "name": "test"
+    }
+  ]
+}
