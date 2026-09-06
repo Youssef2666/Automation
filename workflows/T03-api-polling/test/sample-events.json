@@ -1,0 +1,24 @@
+[
+  {
+    "id": 1,
+    "type": "order.created",
+    "created_at": "2026-08-12T09:15:00Z",
+    "data": {
+      "order_number": "ORD-2026-0180",
+      "customer_id": 33,
+      "total": 612.2,
+      "currency": "USD"
+    }
+  },
+  {
+    "id": 2,
+    "type": "order.paid",
+    "created_at": "2026-08-12T11:09:00Z",
+    "data": {
+      "order_number": "ORD-2026-0161",
+      "customer_id": 20,
+      "total": 1260.76,
+      "currency": "USD"
+    }
+  }
+]

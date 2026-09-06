@@ -1,0 +1,123 @@
+{
+  "name": "P02 - P02 harness (test)",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "c5c448c8-6f6d-5aa8-a4ce-b7434f6451bf",
+      "name": "Start",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [\n  { json: { name: 'flaky: 503 then 200',      url: 'http://mock-api:8080/flaky',       max_attempts: 4, base_ms: 200 } },\n  { json: { name: 'down: 503 x3 -> exhausted', url: 'http://mock-api:8080/health/down', max_attempts: 3, base_ms: 200 } },\n  { json: { name: 'missing: 404 terminal',    url: 'http://mock-api:8080/no-such-route', max_attempts: 4, base_ms: 200 } },\n  { json: { name: 'refused: connection error', url: 'http://mock-api:1/health',         max_attempts: 2, base_ms: 200, timeout_ms: 2000 } },\n];"
+      },
+      "id": "172d7fc5-0bb1-50da-9e64-7d1093703c53",
+      "name": "Cases",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        260,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "ALP02RetryBackof",
+          "mode": "id",
+          "cachedResultName": "P02 - HTTP with backoff"
+        },
+        "mode": "each",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "dd1eb51c-96f2-574d-89d2-dcf1746be55c",
+      "name": "HTTP with backoff (P02)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1,
+      "position": [
+        520,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const cases = $('Cases').all().map(i => i.json.name);\nreturn $input.all().map((it, i) => ({ json: { case: cases[i], ok: it.json.ok, status: it.json.status,\n  attempts: it.json.attempts, terminal: it.json.terminal, retryable: it.json.retryable, response: it.json.response } }));"
+      },
+      "id": "fb7f555c-aa0b-574f-9b5b-182965fcec84",
+      "name": "Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        780,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Cases",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cases": {
+      "main": [
+        [
+          {
+            "node": "HTTP with backoff (P02)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP with backoff (P02)": {
+      "main": [
+        [
+          {
+            "node": "Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Africa/Tripoli",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "ALP01ErrorHandle"
+  },
+  "pinData": {},
+  "versionId": "00a301bc-c6ea-51d4-9f85-e2557b0c1de6",
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "id": "ALP02Harness0000",
+  "tags": [
+    {
+      "name": "automation-lab"
+    },
+    {
+      "name": "test"
+    }
+  ]
+}

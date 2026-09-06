@@ -44,3 +44,11 @@ Facts proven against the running stack on 2026-09-06. Add to this file whenever 
 ## Proven flows
 
 - P01: webhook execution fails -> P01 runs (`mode=error`), execution_log row, Redis counter, Mailpit e-mail.
+- `n8n execute --id` fails with "Missing node to start execution" unless the workflow has a **Manual Trigger**.
+  Schedule-driven workflows therefore also get `manual_trigger(wf, "Run once (manual / CLI)")` wired to the same
+  first node (n8n's usual "When clicking Test workflow" convention).
+- Set node v3.4 typed fields are strict: `object` rejects arrays and `null` handling varies -> build result
+  objects that may carry arbitrary JSON with a Code node instead.
+- HTTP Request v4.2 with `fullResponse` + `neverError`: output `{body, headers, statusCode, statusMessage}`; only
+  connection-level failures go to the error output (`continueErrorOutput`) as `{error:{message,...}}`.
+- `$('Node').last().json` works inside loops (returns the latest run of that node).

@@ -1,0 +1,11 @@
+{
+  "_comment": "/flaky alternates 503 / 200, so the call succeeds on attempt 1 or 2. Other cases: see harness.json and the README table.",
+  "ok": true,
+  "status": 200,
+  "attempts": 2,
+  "terminal": false,
+  "retryable": false,
+  "response": "HTTP 200 after 2 attempt(s)",
+  "data": { "ok": true, "attempt": 2, "message": "succeeded after retry" },
+  "url": "http://mock-api:8080/flaky"
+}

@@ -69,16 +69,16 @@ current screenshot and passes `scripts/validate.py` (see [CONTRIBUTING.md](CONTR
 
 Generated from each folder's README front-matter. Do not edit between the markers.
 
-<!-- STATS:START -->**1 of 36 workflows shipped · 2 of 8 patterns**<!-- STATS:END -->
+<!-- STATS:START -->**2 of 36 workflows shipped · 3 of 8 patterns**<!-- STATS:END -->
 
 <!-- MATRIX:START -->
-### Triggers (1/7 shipped)
+### Triggers (2/7 shipped)
 
 | ID | Workflow | Difficulty | Patterns | Services | Status |
 |---|---|---|---|---|---|
 | T01 | [Webhook to Database](workflows/T01-webhook-to-database/) | Beginner | [P01](patterns/P01-error-handler/), [P03](patterns/P03-idempotency/) | core | ✅ shipped |
 | T02 | Scheduled Daily Digest | Beginner | - | - | 📋 planned |
-| T03 | Polling an API Without Webhooks | Intermediate | - | - | 📋 planned |
+| T03 | [Polling an API Without Webhooks](workflows/T03-api-polling/) | Intermediate | [P01](patterns/P01-error-handler/), [P02](patterns/P02-retry-backoff/) | core | ✅ shipped |
 | T04 | IMAP Email Trigger to Attachment Parser | Intermediate | - | - | 📋 planned |
 | T05 | Form Trigger to Record and Confirmation Email | Beginner | - | - | 📋 planned |
 | T06 | File Watcher: Process on Drop | Beginner | - | - | 📋 planned |
@@ -151,8 +151,8 @@ Each pattern documents a failure story, the rule, its n8n implementation, the tr
 <!-- PATTERNS:START -->
 | ID | Pattern | Used by | Status |
 |---|---|---|---|
-| P01 | [Global Error Handler](patterns/P01-error-handler/) | [T01](workflows/T01-webhook-to-database/) | ✅ shipped |
-| P02 | Retry with Exponential Backoff | - | 📋 planned |
+| P01 | [Global Error Handler](patterns/P01-error-handler/) | [T01](workflows/T01-webhook-to-database/), [T03](workflows/T03-api-polling/) | ✅ shipped |
+| P02 | [Retry with Exponential Backoff](patterns/P02-retry-backoff/) | [T03](workflows/T03-api-polling/) | ✅ shipped |
 | P03 | [Idempotency](patterns/P03-idempotency/) | [T01](workflows/T01-webhook-to-database/) | ✅ shipped |
 | P04 | Rate Limiting and Batching | - | 📋 planned |
 | P05 | Sub-workflow Modularity | - | 📋 planned |

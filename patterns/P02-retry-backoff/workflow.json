@@ -1,0 +1,323 @@
+{
+  "name": "P02 - HTTP with backoff",
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "id": "1aad69a7-ae78-5f16-bcdf-07cd6d596731",
+      "name": "When called by another workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "25b92cbf-28be-5ab4-a4d9-629c819ac795",
+              "name": "attempt",
+              "value": "={{ (Number($json.attempt) || 0) + 1 }}",
+              "type": "number"
+            },
+            {
+              "id": "134ed24f-d5bc-5fae-a3e7-2c7fb089ccca",
+              "name": "url",
+              "value": "={{ $json.url }}",
+              "type": "string"
+            },
+            {
+              "id": "8089b2a7-ef08-5cfc-9d96-2137d0f9ec07",
+              "name": "method",
+              "value": "={{ String($json.method || 'GET').toUpperCase() }}",
+              "type": "string"
+            },
+            {
+              "id": "70400ece-d546-55a4-802d-4b0bebcacc48",
+              "name": "query",
+              "value": "={{ $json.query || {} }}",
+              "type": "object"
+            },
+            {
+              "id": "31882829-e1dd-50c6-886a-365cb234a4fe",
+              "name": "body",
+              "value": "={{ $json.body ?? null }}",
+              "type": "object"
+            },
+            {
+              "id": "63981626-ac19-50fe-8281-e70baa7389ee",
+              "name": "headers",
+              "value": "={{ $json.headers || {} }}",
+              "type": "object"
+            },
+            {
+              "id": "af207c7c-ad9c-5ef0-a5b4-2113ac7f9529",
+              "name": "max_attempts",
+              "value": "={{ Number($json.max_attempts) > 0 ? Number($json.max_attempts) : 5 }}",
+              "type": "number"
+            },
+            {
+              "id": "5a7371c1-8bdf-57c0-8dc2-ea1007b4d1bb",
+              "name": "base_ms",
+              "value": "={{ Number($json.base_ms) > 0 ? Number($json.base_ms) : 500 }}",
+              "type": "number"
+            },
+            {
+              "id": "7788def0-7315-51bd-a61f-1019700b2412",
+              "name": "timeout_ms",
+              "value": "={{ Number($json.timeout_ms) > 0 ? Number($json.timeout_ms) : 10000 }}",
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "22fccf1e-74e0-52f0-90ca-59520f8a9c3c",
+      "name": "Attempt state",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        14560,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "={{ $json.method }}",
+        "url": "={{ $json.url }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "autodetect"
+            }
+          },
+          "timeout": "={{ $json.timeout_ms }}"
+        },
+        "sendQuery": true,
+        "specifyQuery": "json",
+        "jsonQuery": "={{ JSON.stringify($json.query || {}) }}",
+        "sendHeaders": true,
+        "specifyHeaders": "json",
+        "jsonHeaders": "={{ JSON.stringify($json.headers || {}) }}",
+        "sendBody": "={{ $json.body !== null && $json.body !== undefined && $json.method !== 'GET' }}",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body ?? {}) }}"
+      },
+      "id": "f377afe0-dfda-5922-b6c3-5fccc421875f",
+      "name": "HTTP Request",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        14820,
+        0
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Runs once per attempt with the HTTP node's output (success output or error output) as $input.\nconst state = $('Attempt state').last().json;\nconst r = $input.first().json || {};\nconst failed = r.error !== undefined && r.statusCode === undefined;   // connection-level failure (error output)\nconst status = failed ? 0 : Number(r.statusCode || 0);\nconst body = failed ? null : r.body;\nconst headers = (r.headers || {});\nconst ok = status >= 200 && status < 300;\nconst retryable = !ok && (status === 0 || status === 408 || status === 425 || status === 429 || status >= 500);\nconst exhausted = state.attempt >= state.max_attempts;\n// exponential backoff with cap and +0..25% jitter; Retry-After (seconds) wins when larger\nlet delay = Math.min(30000, state.base_ms * Math.pow(2, state.attempt - 1));\ndelay = Math.round(delay + Math.random() * delay * 0.25);\nconst retryAfter = Number(headers['retry-after']);\nif (retryAfter > 0) delay = Math.max(delay, retryAfter * 1000);\nconst message = failed ? String((r.error && (r.error.message || r.error.description)) || 'request failed')\n  : (typeof body === 'string' ? body : JSON.stringify(body));\nreturn [{ json: {\n  ...state,\n  ok, status, retryable,\n  retry: !ok && retryable && !exhausted,\n  terminal: !ok && (!retryable || exhausted),\n  delay_ms: delay,\n  attempts: state.attempt,\n  data: body,\n  response: ok ? `HTTP ${status} after ${state.attempt} attempt(s)` : `HTTP ${status || 'ERR'}: ${String(message).slice(0, 300)}`,\n}}];"
+      },
+      "id": "aac34349-446a-59d8-a46e-36d99f5b184b",
+      "name": "Classify",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        15080,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "0412d119-49ae-5699-b251-11d353cc036b",
+              "leftValue": "={{ $json.retry }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "9cbf2e03-141e-5658-96fd-28f74bcd7b46",
+      "name": "Retry?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        15340,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "amount": "={{ $json.delay_ms / 1000 }}",
+        "unit": "seconds"
+      },
+      "id": "6a37d6c5-94f0-5456-86ad-596a21580613",
+      "name": "Backoff",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        520,
+        260
+      ],
+      "webhookId": "e5f1d233-079a-5587-b436-dc53ae43cb1c"
+    },
+    {
+      "parameters": {
+        "jsCode": "const r = $input.first().json;\nreturn [{ json: { ok: r.ok, status: r.status, attempts: r.attempts, terminal: r.terminal, retryable: r.retryable,\n                  response: r.response, data: r.data === undefined ? null : r.data, url: r.url } }];"
+      },
+      "id": "f5f1770f-924d-5b4a-93fe-b26538f035c5",
+      "name": "Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        15600,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## P02 - HTTP with backoff\nInput `{url, method?, query?, body?, headers?, max_attempts?=5, base_ms?=500}`.\n\n- 2xx -> done\n- network error / 408 / 425 / 429 / 5xx -> **retry** after `base_ms * 2^(n-1)` (+jitter, cap 30 s, honours `Retry-After`)\n- other 4xx -> **terminal**, no retry\n\nReturns `{ok, status, attempts, terminal, retryable, response, data}`; never throws - the caller decides.",
+        "height": 250,
+        "width": 620,
+        "color": 4
+      },
+      "id": "0401a1c3-a906-564d-807f-b90c4ebb5913",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -40,
+        -330
+      ]
+    }
+  ],
+  "connections": {
+    "When called by another workflow": {
+      "main": [
+        [
+          {
+            "node": "Attempt state",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Attempt state": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Classify",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Classify",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classify": {
+      "main": [
+        [
+          {
+            "node": "Retry?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Retry?": {
+      "main": [
+        [
+          {
+            "node": "Backoff",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Backoff": {
+      "main": [
+        [
+          {
+            "node": "Attempt state",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Africa/Tripoli",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "ALP01ErrorHandle"
+  },
+  "pinData": {},
+  "versionId": "469533fe-337c-516f-9a8d-1a07019575e9",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "description": "HTTP request with exponential backoff; classifies retryable vs terminal errors."
+  },
+  "id": "ALP02RetryBackof",
+  "tags": [
+    {
+      "name": "automation-lab"
+    },
+    {
+      "name": "pattern"
+    },
+    {
+      "name": "P02"
+    }
+  ]
+}

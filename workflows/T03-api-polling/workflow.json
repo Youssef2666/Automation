@@ -1,0 +1,568 @@
+{
+  "name": "T03 - Polling an API Without Webhooks",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 1
+            }
+          ]
+        }
+      },
+      "id": "7d30ef18-1674-53a7-aa6e-1d90752dc624",
+      "name": "Every minute",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "279bb9b2-2fe7-5258-b987-d301ce8aa449",
+      "name": "Run once (manual / CLI)",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "key": "t03:events:cursor",
+        "propertyName": "cursor",
+        "keyType": "automatic",
+        "options": {}
+      },
+      "id": "c061cb50-8433-5a6f-897e-32f6bb84138c",
+      "name": "Read cursor",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        260,
+        0
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "redis": {
+          "id": "ALcredRedisLocal",
+          "name": "Redis - local"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "f6232f08-f635-5b10-9bc2-baf5c25e6ff2",
+              "name": "url",
+              "value": "http://mock-api:8080/events",
+              "type": "string"
+            },
+            {
+              "id": "c99542e1-0aff-586a-b597-6fcd8e771ea0",
+              "name": "query",
+              "value": "={{ { id_gte: Number($json.cursor || 0) + 1, _sort: 'id', _order: 'asc', _limit: 50 } }}",
+              "type": "object"
+            },
+            {
+              "id": "3a1ee935-008d-595c-ac9a-f6e2e3f84947",
+              "name": "max_attempts",
+              "value": 5,
+              "type": "number"
+            },
+            {
+              "id": "bb88bc80-e2a3-5726-8634-bfefa42ff46f",
+              "name": "base_ms",
+              "value": 500,
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a08d4526-712a-58ff-b269-ff74683d9517",
+      "name": "Poll request",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        520,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "ALP02RetryBackof",
+          "mode": "id",
+          "cachedResultName": "P02 - HTTP with backoff"
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "a2d224d9-2aed-5161-bb2b-dad87660b9b7",
+      "name": "HTTP with backoff (P02)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1,
+      "position": [
+        780,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ec11c9d5-a3d7-52e5-91c5-4fedfcabfc53",
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "3d85af15-72b7-58c1-b3ab-6c5434c84450",
+      "name": "Fetched OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1040,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "errorMessage": "=T03 poll failed after {{ $json.attempts }} attempt(s): {{ $json.response }}"
+      },
+      "id": "20afc781-b6ef-5466-92cd-626fda87b958",
+      "name": "Poll failed",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        1300,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "d2f0157a-a360-5060-8fec-61f1ed9e65e4",
+              "leftValue": "={{ Array.isArray($json.data) && $json.data.length > 0 }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "78a55f79-3023-5329-8832-c5e17cf20471",
+      "name": "Any new events?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1300,
+        220
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "e5e0b69c-d895-569e-97d1-91a0ef65b43b",
+      "name": "Nothing new",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1560,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "data",
+        "options": {}
+      },
+      "id": "9f3bbc53-cd6d-516b-bbcd-c7b4571d909c",
+      "name": "Split events",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        1560,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "schema": {
+          "__rl": true,
+          "value": "public",
+          "mode": "list"
+        },
+        "table": {
+          "__rl": true,
+          "value": "webhook_events",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "external_id": "=mock-event-{{ $json.id }}",
+            "source": "mock-api-poll",
+            "event_type": "={{ $json.type }}",
+            "payload": "={{ JSON.stringify($json) }}",
+            "received_at": "={{ $now.toISO() }}"
+          },
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "outputColumns": [
+            "*"
+          ]
+        }
+      },
+      "id": "48c215f2-7dc5-59d4-b23e-0593d03ab53e",
+      "name": "Insert webhook_events",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1820,
+        0
+      ],
+      "notes": "Unique external_id: a replayed page is rejected row by row, not as a batch.",
+      "notesInFlow": true,
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "ALcredPostgresDm",
+          "name": "Postgres - demo"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "destinationFieldName": "data",
+        "options": {}
+      },
+      "id": "073d8160-6ef4-5d37-8280-26caca3c997c",
+      "name": "Collect inserted",
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        2080,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// One aggregated item in. Compute the new cursor from the events fetched in this run.\nconst events = $('Split events').all().map(i => i.json);\nconst inserted = $input.first().json.data || [];\nconst ids = events.map(e => Number(e.id)).filter(n => Number.isFinite(n));\nconst prev = Number($('Read cursor').first().json.cursor || 0);\nreturn [{ json: {\n  source: 'mock-api-events',\n  previous_cursor: prev,\n  cursor: ids.length ? Math.max(...ids) : prev,\n  fetched: events.length,\n  stored: inserted.filter(r => r && r.id !== undefined).length,\n  last_run_at: new Date().toISOString(),\n}}];"
+      },
+      "id": "02e9a528-fdd2-50a3-bef7-2f3a7b1c474b",
+      "name": "Summarize run",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2340,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "set",
+        "key": "t03:events:cursor",
+        "value": "={{ String($json.cursor) }}",
+        "keyType": "string"
+      },
+      "id": "936eb1cf-2fcc-5883-bf1c-0a26b57fa71d",
+      "name": "Advance cursor",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        2600,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 500,
+      "credentials": {
+        "redis": {
+          "id": "ALcredRedisLocal",
+          "name": "Redis - local"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "schema": {
+          "__rl": true,
+          "value": "public",
+          "mode": "list"
+        },
+        "table": {
+          "__rl": true,
+          "value": "sync_state",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "source": "={{ $('Summarize run').item.json.source }}",
+            "cursor": "={{ String($('Summarize run').item.json.cursor) }}",
+            "last_run_at": "={{ $('Summarize run').item.json.last_run_at }}",
+            "rows_seen": "={{ $('Summarize run').item.json.fetched }}"
+          },
+          "matchingColumns": [
+            "source"
+          ],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "54966942-c5d9-5385-a9b5-d8fd08238d1e",
+      "name": "Upsert sync_state",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2860,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "ALcredPostgresDm",
+          "name": "Postgres - demo"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "## T03 - Polling without webhooks\nCursor in Redis (`t03:events:cursor`), 50 events per run, ascending ids.\n\n- fetch goes through **P02** (backoff on 5xx/429/network errors)\n- inserts are duplicate-safe (`webhook_events.external_id` UNIQUE, continue on error)\n- cursor advances **after** the batch is stored; `sync_state` keeps an audit row\n\nReset: `redis-cli del t03:events:cursor`.",
+        "height": 240,
+        "width": 600,
+        "color": 4
+      },
+      "id": "580dd3e6-5022-518f-af8f-6005016faf3f",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -40,
+        -330
+      ]
+    }
+  ],
+  "connections": {
+    "Every minute": {
+      "main": [
+        [
+          {
+            "node": "Read cursor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read cursor": {
+      "main": [
+        [
+          {
+            "node": "Poll request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Poll request": {
+      "main": [
+        [
+          {
+            "node": "HTTP with backoff (P02)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP with backoff (P02)": {
+      "main": [
+        [
+          {
+            "node": "Fetched OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run once (manual / CLI)": {
+      "main": [
+        [
+          {
+            "node": "Read cursor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetched OK?": {
+      "main": [
+        [
+          {
+            "node": "Any new events?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Poll failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Any new events?": {
+      "main": [
+        [
+          {
+            "node": "Split events",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Nothing new",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split events": {
+      "main": [
+        [
+          {
+            "node": "Insert webhook_events",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert webhook_events": {
+      "main": [
+        [
+          {
+            "node": "Collect inserted",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect inserted": {
+      "main": [
+        [
+          {
+            "node": "Summarize run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Summarize run": {
+      "main": [
+        [
+          {
+            "node": "Advance cursor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Advance cursor": {
+      "main": [
+        [
+          {
+            "node": "Upsert sync_state",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Africa/Tripoli",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "ALP01ErrorHandle"
+  },
+  "pinData": {},
+  "versionId": "9a92f903-8bb9-5b44-bd70-fb13d6156413",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "description": "Cursor-based polling of a REST feed with backoff and duplicate-safe inserts."
+  },
+  "id": "ALT03ApiPolling0",
+  "tags": [
+    {
+      "name": "automation-lab"
+    },
+    {
+      "name": "Triggers"
+    }
+  ]
+}

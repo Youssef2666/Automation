@@ -1,0 +1,6 @@
+{
+  "url": "http://mock-api:8080/flaky",
+  "method": "GET",
+  "max_attempts": 4,
+  "base_ms": 200
+}
