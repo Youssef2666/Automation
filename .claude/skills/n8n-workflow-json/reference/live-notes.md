@@ -97,3 +97,33 @@ Facts proven against the running stack on 2026-09-06. Add to this file whenever 
   re-read. Convert to File `csv` prefixes the file with a UTF-8 BOM (harmless for Excel; strip it for strict parsers).
 - Cycles that re-enter a sub-workflow node (Wait -> gate again) work as long as the sub-workflow echoes the fields
   it needs as input (P04 returns `key`, `limit`, `window_seconds`).
+
+## Learned while shipping P08 / O05 / M04 (2026-09-07)
+
+- **Postgres v2.5 `queryReplacement`**: every `{{ }}` is evaluated on its own. An array result pushes its elements
+  (objects/arrays are `JSON.stringify`-ed, `undefined` is *dropped* -> "there is no parameter $N"); a plain string
+  result is split on commas (a note containing "a, b" becomes two params). Always pass one array:
+  `params="={{ [ $json.a, $json.b ?? null, JSON.stringify($json.rows) ] }}"`. A nested array inside that outer
+  array reaches pg as `text[]` ("cannot cast type text[] to jsonb") -> pre-stringify it.
+- Redis v1 `get` on a missing key outputs `{ "<propertyName>": null }` and **drops the input fields**; read
+  earlier data with `$('Node').first().json`.
+- Postgres `executeQuery` returning zero rows + `alwaysOutputData` -> one `{}` item; a failed Postgres node with
+  `continueRegularOutput` emits `{message, error: {...}}` (pairedItem intact) - test `$json.action === undefined`
+  (or whatever column the query returns), not `$json.error`.
+- n8n node (`n8n-nodes-base.n8n`): `execution getAll` items have no workflow *name* (`id, mode, status, startedAt,
+  stoppedAt, workflowId, finished`); get names from `workflow getAll` (`filters.excludePinnedData: true`) and map.
+  `options.activeWorkflows` on execution getAll is the "Include Execution Details" flag (`includeData`).
+  The node runs once per input item: `.once()` on the second call, `.always_output()` on the first so an empty
+  page does not end the run.
+- Paired-item lookups (`$('Config').item`) fail *several nodes after* a Code node that returned fresh items
+  ("Paired item data for item from node '...' is unavailable"). After any Code node use `$('Node').first().json`.
+- `run-workflow.py` twice in a row can hit "Task Broker's port 5680 is already in use" if the previous CLI process
+  has not exited yet; just rerun. The CLI's trailing "Calling Error Workflow ... Cannot use a pool after calling
+  end on the pool" is noise: read the real error with `executions.py --id <exec>`.
+- Writable-CTE upsert (`with updated as (update ... returning), inserted as (insert ... where not exists (select 1
+  from updated) returning) select ...`) works from the Postgres node without a unique index (P08). For bulk
+  `INSERT ... ON CONFLICT` with a partial unique index the conflict target must repeat the predicate:
+  `on conflict (execution_id) where execution_id is not null do update` (O05). `returning (xmax = 0) as inserted`
+  distinguishes inserted from updated rows.
+- Redis `INCR` + `expire` refreshes the TTL on every call (P01 semantics: silent while it keeps happening). For
+  "at most once per hour" key the counter on the hour: `m04:alert:<metric>:{{ $now.toFormat('yyyyLLddHH') }}`.

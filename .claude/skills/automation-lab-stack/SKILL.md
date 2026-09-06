@@ -59,7 +59,7 @@ Hardware baseline: core 2 vCPU / 4 GB / 5 GB disk; ai 4 vCPU / 8 GB / 15 GB (mod
 | postgres | postgres | `ALcredPostgresDm` | Postgres - demo | `POSTGRES_USER/PASSWORD`, db `DEMO_DB` |
 | redis | redis | `ALcredRedisLocal` | Redis - local | host redis |
 | smtp | smtp | `ALcredSmtpMailpt` | SMTP - Mailpit | mailpit:1025, no auth, no TLS |
-| imap | imap | `ALcredImapGreenM` | IMAP - GreenMail | greenmail:3143, user `inbox@lab.local` / `inbox` |
+| imap | imap | `ALcredImapGreenM` | IMAP - GreenMail | greenmail:3143, login `inbox` / `inbox` (mailbox inbox@lab.local) |
 | s3 | s3 | `ALcredS3MinioLoc` | S3 - MinIO | `MINIO_ROOT_USER/PASSWORD`, endpoint http://minio:9000, path-style |
 | ollama | ollamaApi | `ALcredOllamaLocl` | Ollama - local | http://ollama:11434 |
 | qdrant | qdrantApi | `ALcredQdrantLocl` | Qdrant - local | http://qdrant:6333 |

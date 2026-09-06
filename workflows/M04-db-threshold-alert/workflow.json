@@ -1,0 +1,775 @@
+{
+  "name": "M04 - DB Threshold Alert",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 10
+            }
+          ]
+        }
+      },
+      "id": "1a4d4dd9-4312-5a3d-b734-608b0dc2af53",
+      "name": "Every 10 minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "c57740a7-8494-5f3a-a77c-f57b4a7c3fb5",
+      "name": "Run once (manual / CLI)",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "10d149ca-1cd6-52bc-b3fc-092641620d46",
+              "name": "started_at",
+              "value": "={{ $now.toISO() }}",
+              "type": "string"
+            },
+            {
+              "id": "ab212000-d12f-5360-8252-874380f6a17e",
+              "name": "window_key",
+              "value": "={{ $now.toFormat('yyyyLLddHH') }}",
+              "type": "string"
+            },
+            {
+              "id": "940f8a85-6109-5101-ac7d-1c6ae10665b3",
+              "name": "pending_orders_max",
+              "value": 10,
+              "type": "number"
+            },
+            {
+              "id": "0f5ad527-3677-54af-8c9f-61141099ec51",
+              "name": "pending_age_hours_max",
+              "value": 48,
+              "type": "number"
+            },
+            {
+              "id": "8fc12c6d-b077-5483-ae4f-972c90415e70",
+              "name": "open_tickets_urgent_max",
+              "value": 3,
+              "type": "number"
+            },
+            {
+              "id": "7c2cd250-bb17-5cac-a7b4-ade7410a3bf4",
+              "name": "sla_breached_max",
+              "value": 0,
+              "type": "number"
+            },
+            {
+              "id": "44b8fd54-cc83-520a-8765-be9ffd90eb26",
+              "name": "alert_to",
+              "value": "ops@lab.local",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "508db2fb-d178-5f9c-af48-5fc853f2f840",
+      "name": "Thresholds",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        260,
+        0
+      ],
+      "notes": "Limits live here, not in the SQL. window_key = current hour -> one alert per metric per hour.",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select\n  (select count(*) from orders where status = 'pending')::int as pending_orders,\n  (select coalesce(round(extract(epoch from (now() - min(ordered_at))) / 3600), 0)\n     from orders where status = 'pending')::int as pending_age_hours,\n  (select count(*) from tickets\n     where status in ('open', 'triaged', 'in_progress') and priority = 'urgent')::int as open_tickets_urgent,\n  (select count(*) from tickets\n     where status in ('open', 'triaged', 'in_progress') and sla_due_at < now())::int as sla_breached,\n  now() as checked_at",
+        "options": {}
+      },
+      "id": "4ce92871-a2ff-571d-8013-f74933f21dd4",
+      "name": "Current values",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        520,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "executeOnce": true,
+      "credentials": {
+        "postgres": {
+          "id": "ALcredPostgresDm",
+          "name": "Postgres - demo"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// One row of current values in, one item out: every metric with its limit, plus the list of breaches.\nconst v = $input.first().json;\nconst t = $('Thresholds').first().json;\nconst defs = [\n  { metric: 'pending_orders',      label: 'Pending orders',               value: v.pending_orders,      threshold: t.pending_orders_max,      severity: 'warning' },\n  { metric: 'pending_age_hours',   label: 'Oldest pending order (hours)', value: v.pending_age_hours,   threshold: t.pending_age_hours_max,   severity: 'warning' },\n  { metric: 'open_tickets_urgent', label: 'Open urgent tickets',          value: v.open_tickets_urgent, threshold: t.open_tickets_urgent_max, severity: 'error' },\n  { metric: 'sla_breached',        label: 'Open tickets past SLA',        value: v.sla_breached,        threshold: t.sla_breached_max,        severity: 'error' },\n];\nconst metrics = defs.map(d => ({ ...d, value: Number(d.value ?? 0), threshold: Number(d.threshold),\n                                 breached: Number(d.value ?? 0) > Number(d.threshold) }));\nconst breached = metrics.filter(m => m.breached);\nconst summary = metrics.map(m => `${m.metric} ${m.value}/${m.threshold}${m.breached ? '!' : ''}`).join(', ');\nreturn [{ json: { checked_at: v.checked_at, any_breached: breached.length > 0, breached, metrics, summary } }];"
+      },
+      "id": "825f669f-6af8-5822-8a04-b37309acf1f4",
+      "name": "Compare with thresholds",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        780,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "e134dfe8-24df-5706-bb29-4af054fb3820",
+              "leftValue": "={{ $json.any_breached }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "e553d581-a9eb-5903-a1f0-eabe2aad106d",
+      "name": "Any breach?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1040,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "breached",
+        "options": {}
+      },
+      "id": "66dedc5b-15de-55f6-bdb3-04cab453c33b",
+      "name": "One item per breach",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        1300,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "incr",
+        "key": "=m04:alert:{{ $json.metric }}:{{ $('Thresholds').first().json.window_key }}",
+        "expire": true,
+        "ttl": 3600
+      },
+      "id": "3a462734-d1c6-5045-a698-fa849917529d",
+      "name": "Alert-storm guard (INCR)",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        1560,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 500,
+      "credentials": {
+        "redis": {
+          "id": "ALcredRedisLocal",
+          "name": "Redis - local"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// One item per breach came back from Redis as { \"<key>\": count }. count === 1 -> first alert this hour.\nconst breaches = $('One item per breach').all().map(i => i.json);\nconst counts = $input.all().map(i => Number(Object.values(i.json)[0] || 0));\nconst rows = breaches.map((b, i) => ({ ...b, count: counts[i] || 0 }));\nconst toAlert = rows.filter(r => r.count === 1);\nconst suppressed = rows.filter(r => r.count !== 1);\nconst severity = toAlert.some(r => r.severity === 'error') ? 'error' : 'warning';\nconst line = (r) => `${r.metric} ${r.value} > ${r.threshold}`;\nconst tr = (r) => `<tr><td style=\"padding:4px 10px;border-bottom:1px solid #eee\">${r.label}</td>` +\n  `<td style=\"padding:4px 10px;border-bottom:1px solid #eee;text-align:right\"><b>${r.value}</b></td>` +\n  `<td style=\"padding:4px 10px;border-bottom:1px solid #eee;text-align:right\">${r.threshold}</td>` +\n  `<td style=\"padding:4px 10px;border-bottom:1px solid #eee\">${r.severity}</td></tr>`;\nconst table = (list) => `<table style=\"border-collapse:collapse;font-size:14px\"><tr>` +\n  ['Metric', 'Value', 'Limit', 'Severity'].map(h => `<th align=\"left\" style=\"padding:4px 10px;border-bottom:2px solid #333\">${h}</th>`).join('') +\n  `</tr>${list.map(tr).join('')}</table>`;\nconst hour = $('Thresholds').first().json.window_key;\nconst subject = `[Automation Lab] ${severity.toUpperCase()}: ${toAlert.length} metric${toAlert.length === 1 ? '' : 's'} over threshold (${toAlert.map(line).join(', ')})`;\nconst html = `<div style=\"font-family:sans-serif;max-width:720px\">\n<h2>DB threshold alert</h2>\n<p>Checked ${$('Compare with thresholds').first().json.checked_at}. Source: demo database (orders, tickets).</p>\n${table(toAlert)}\n${suppressed.length ? `<p style=\"color:#888\">Also over threshold, already alerted this hour (${hour}): ${suppressed.map(line).join(', ')}</p>` : ''}\n<p style=\"color:#888;font-size:12px\">One e-mail per metric per hour. Sent by M04 - DB Threshold Alert (Automation Lab).</p>\n</div>`;\nconst text = [`DB threshold alert (${severity})`, ...toAlert.map(r => `  ${r.label}: ${r.value} (limit ${r.threshold}, ${r.severity})`),\n  ...(suppressed.length ? [`  already alerted this hour: ${suppressed.map(line).join(', ')}`] : [])].join('\\n');\nreturn [{ json: {\n  alert: toAlert.length > 0, severity, subject, html, text,\n  alerted: toAlert.map(r => r.metric), suppressed: suppressed.map(r => r.metric),\n  notes: toAlert.length\n    ? `alerted: ${toAlert.map(line).join(', ')}` + (suppressed.length ? `; suppressed: ${suppressed.map(line).join(', ')}` : '')\n    : `breach persists, alert suppressed this hour: ${suppressed.map(line).join(', ')}`,\n} }];"
+      },
+      "id": "35a214e9-3f0e-5604-88fe-3de9310b0127",
+      "name": "Decide",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1820,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "0db3798d-b12d-5a6d-a6f0-3f00e0bef3ad",
+              "leftValue": "={{ $json.alert }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "5f40b7d9-04de-512b-a90f-7c4577c8a9b9",
+      "name": "First alert this hour?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2080,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "automation-lab@lab.local",
+        "toEmail": "={{ $('Thresholds').first().json.alert_to }}",
+        "subject": "={{ $json.subject }}",
+        "options": {},
+        "emailFormat": "html",
+        "html": "={{ $json.html }}"
+      },
+      "id": "83a46e63-00fd-5a21-bbec-f556c1bcb93a",
+      "name": "Email ops (Mailpit)",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        2340,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "smtp": {
+          "id": "ALcredSmtpMailpt",
+          "name": "SMTP - Mailpit"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "schema": {
+          "__rl": true,
+          "value": "public",
+          "mode": "list"
+        },
+        "table": {
+          "__rl": true,
+          "value": "notifications",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "channel": "email",
+            "target": "={{ $('Thresholds').first().json.alert_to }}",
+            "subject": "={{ $('Decide').first().json.subject }}",
+            "body": "={{ $('Decide').first().json.text }}",
+            "severity": "={{ $('Decide').first().json.severity }}",
+            "sent_at": "={{ $now.toISO() }}"
+          },
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "84995619-9c52-54df-8c71-d26b097d21eb",
+      "name": "Record notification",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2600,
+        0
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "postgres": {
+          "id": "ALcredPostgresDm",
+          "name": "Postgres - demo"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "fbe1c374-7083-58cf-8e59-660d8bc17609",
+      "name": "Suppressed (already alerted this hour)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        2340,
+        220
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "f4727054-4875-5ee3-9d2a-18c0d1f5d554",
+      "name": "All within thresholds",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1300,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "6dc9d471-9252-5b0a-b6c8-85aca5eeb3a9",
+              "name": "execution_id",
+              "value": "={{ $execution.id }}",
+              "type": "string"
+            },
+            {
+              "id": "13db99dc-3908-5698-a11f-cc6d50d55b77",
+              "name": "workflow_id",
+              "value": "={{ $workflow.id }}",
+              "type": "string"
+            },
+            {
+              "id": "0a32220d-eb00-5343-823c-0352919aeab8",
+              "name": "workflow_name",
+              "value": "={{ $workflow.name }}",
+              "type": "string"
+            },
+            {
+              "id": "8c551254-87d3-561e-9149-c5539a156eda",
+              "name": "status",
+              "value": "warning",
+              "type": "string"
+            },
+            {
+              "id": "0c00a209-a4bc-59ac-9e53-b80106b1f27c",
+              "name": "started_at",
+              "value": "={{ $('Thresholds').first().json.started_at }}",
+              "type": "string"
+            },
+            {
+              "id": "a5e904c2-0641-5415-9677-8ab5ce0bd784",
+              "name": "notes",
+              "value": "={{ $('Decide').first().json.notes }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "0258ef6e-1c0c-5908-b68e-db8ce5dfc023",
+      "name": "Log input (alerted)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2860,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c1bd2a80-4706-5e0f-8250-0f5631a33d5c",
+              "name": "execution_id",
+              "value": "={{ $execution.id }}",
+              "type": "string"
+            },
+            {
+              "id": "43ad8bf1-fa19-5059-a4da-337f4a4c4b94",
+              "name": "workflow_id",
+              "value": "={{ $workflow.id }}",
+              "type": "string"
+            },
+            {
+              "id": "4ddcf083-308e-525c-9192-3d2c0884ee91",
+              "name": "workflow_name",
+              "value": "={{ $workflow.name }}",
+              "type": "string"
+            },
+            {
+              "id": "894e7a46-47b4-5f89-b7b8-92a2aac983ac",
+              "name": "status",
+              "value": "warning",
+              "type": "string"
+            },
+            {
+              "id": "e5192d94-b3ac-5685-b704-05a6a03227ce",
+              "name": "started_at",
+              "value": "={{ $('Thresholds').first().json.started_at }}",
+              "type": "string"
+            },
+            {
+              "id": "f9a819cf-052a-5509-b5c4-5072c7a693c2",
+              "name": "notes",
+              "value": "={{ $('Decide').first().json.notes }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "976f4d7e-edc3-5fee-83a8-6449043ef5ce",
+      "name": "Log input (suppressed)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2600,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "5062351d-9a64-50d9-a0ca-b3cb56e421b4",
+              "name": "execution_id",
+              "value": "={{ $execution.id }}",
+              "type": "string"
+            },
+            {
+              "id": "ad45ccc6-b30a-5cf3-aa24-2a98a8b1be9a",
+              "name": "workflow_id",
+              "value": "={{ $workflow.id }}",
+              "type": "string"
+            },
+            {
+              "id": "cc6603b9-bd4a-508c-9327-cde8d86a3dbf",
+              "name": "workflow_name",
+              "value": "={{ $workflow.name }}",
+              "type": "string"
+            },
+            {
+              "id": "ebb714d0-627e-5318-a709-878a57477c60",
+              "name": "status",
+              "value": "info",
+              "type": "string"
+            },
+            {
+              "id": "83c6979b-1bad-5df4-81c1-3d8bbbe279b4",
+              "name": "started_at",
+              "value": "={{ $('Thresholds').first().json.started_at }}",
+              "type": "string"
+            },
+            {
+              "id": "e0e38467-2eac-5702-a80b-3e428e68fa60",
+              "name": "notes",
+              "value": "={{ 'all within thresholds: ' + $('Compare with thresholds').first().json.summary }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "0a2efd5d-73c7-5892-89da-b73b9da30b82",
+      "name": "Log input (all within)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1560,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "ALP08Observabili",
+          "mode": "id",
+          "cachedResultName": "P08 - Log execution"
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "04150dda-cb2e-5532-bf54-cc5291a8e7f7",
+      "name": "Log execution (P08)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1,
+      "position": [
+        3120,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## M04 - DB threshold alert\nEvery 10 min: **Thresholds** (Set) -> one SQL with the current values -> compare -> breaches only.\n\nStorm guard: Redis `INCR m04:alert:<metric>:<hour>` (TTL 1 h) - the first breach of a metric in a clock hour e-mails `ops@lab.local` (Mailpit) + `notifications` row; repeats are **Suppressed**.\n\nEvery path ends in **P08 - Log execution**: `info` (all within), `warning` (alerted / suppressed), so a quiet run still leaves a row. Seed data trips pending_orders, pending_age_hours and sla_breached.",
+        "height": 250,
+        "width": 700,
+        "color": 4
+      },
+      "id": "378bfb77-796c-5cb1-955b-45adf3b3c686",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -40,
+        -330
+      ]
+    }
+  ],
+  "connections": {
+    "Every 10 minutes": {
+      "main": [
+        [
+          {
+            "node": "Thresholds",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Thresholds": {
+      "main": [
+        [
+          {
+            "node": "Current values",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Current values": {
+      "main": [
+        [
+          {
+            "node": "Compare with thresholds",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compare with thresholds": {
+      "main": [
+        [
+          {
+            "node": "Any breach?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run once (manual / CLI)": {
+      "main": [
+        [
+          {
+            "node": "Thresholds",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Any breach?": {
+      "main": [
+        [
+          {
+            "node": "One item per breach",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "All within thresholds",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "One item per breach": {
+      "main": [
+        [
+          {
+            "node": "Alert-storm guard (INCR)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Alert-storm guard (INCR)": {
+      "main": [
+        [
+          {
+            "node": "Decide",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decide": {
+      "main": [
+        [
+          {
+            "node": "First alert this hour?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "First alert this hour?": {
+      "main": [
+        [
+          {
+            "node": "Email ops (Mailpit)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Suppressed (already alerted this hour)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email ops (Mailpit)": {
+      "main": [
+        [
+          {
+            "node": "Record notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record notification": {
+      "main": [
+        [
+          {
+            "node": "Log input (alerted)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log input (alerted)": {
+      "main": [
+        [
+          {
+            "node": "Log execution (P08)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Suppressed (already alerted this hour)": {
+      "main": [
+        [
+          {
+            "node": "Log input (suppressed)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log input (suppressed)": {
+      "main": [
+        [
+          {
+            "node": "Log execution (P08)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "All within thresholds": {
+      "main": [
+        [
+          {
+            "node": "Log input (all within)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log input (all within)": {
+      "main": [
+        [
+          {
+            "node": "Log execution (P08)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Africa/Tripoli",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "ALP01ErrorHandle"
+  },
+  "pinData": {},
+  "versionId": "c5051086-0bd7-56d5-bf22-84f8735200a6",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "description": "Checks four business metrics against limits every 10 minutes; e-mails once per metric per hour and logs every run through P08."
+  },
+  "id": "ALM04DbThreshold",
+  "tags": [
+    {
+      "name": "automation-lab"
+    },
+    {
+      "name": "Monitoring"
+    }
+  ]
+}

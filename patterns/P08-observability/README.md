@@ -137,4 +137,4 @@ filled from the n8n API and charted in Metabase.
 - `M04 - DB Threshold Alert` (`info` when all within thresholds, `warning` on a breach, alerted or suppressed)
 - `P01 - Global Error Handler` (writes the `error` rows to the same table directly, same vocabulary)
 - `T02 - Scheduled Daily Digest` (planned: log `success` / `info` after *Record notification*)
-- `M01 - Uptime Monitor with Escalation` (planned: `warning` on state changes)
+- `M01 - Uptime Monitor with Escalation` (planned: `warning` on state changes; M01 ships without the call today)

@@ -8,8 +8,8 @@ are two patterns (P01, P08), one workflow (O05), one Postgres table, and n8n's o
 | Piece | What it does | Where to look |
 |---|---|---|
 | **P01 error handler** | Every workflow sets `settings.errorWorkflow` to P01. On failure P01 receives the failing workflow, node, error message and execution id, writes a row to `demo.notifications` and emails `ops@lab.local` through Mailpit | `patterns/P01-*`, Mailpit at <http://localhost:8025>, `select * from notifications order by sent_at desc` |
-| **P08 execution log** | A sub-workflow called at the end of a run (and by P01 on failure) that upserts one row per execution into `demo.execution_log`: workflow id and name, status, start/finish, duration, error node and message | `patterns/P08-*` |
-| **O05 execution stats** | Scheduled workflow that pulls executions from the n8n public API (`n8n API - local` credential), backfills `execution_log` for workflows that do not call P08, and emails a daily summary | `workflows/O05-*` |
+| **P08 execution log** | A sub-workflow called as the last node of a run that upserts one row per execution into `demo.execution_log`: workflow id and name, status (`success` / `warning` / `info`), start/finish, duration, notes. P01 writes the `error` rows to the same table directly | `patterns/P08-*` |
+| **O05 execution stats** | Every 15 minutes: pulls executions from the n8n public API (`n8n API - local` credential), backfills `execution_log` for runs nobody logged (and fills missing timing on P08/P01 rows), creates the unique index on `execution_id`, and writes a 24 h stats summary (runs per workflow/status, p50/p95) to `notifications` (channel `log`) | `workflows/O05-*` |
 | **n8n executions view** | Per-workflow run history with node-level input and output | <http://localhost:5678/home/executions> |
 | **Metabase** | Dashboards over `demo.execution_log`, `notifications`, `uptime_checks` | <http://localhost:3001> |
 | **Container logs** | n8n's structured log (level from `N8N_LOG_LEVEL`, default `info`) | `docker compose logs -f n8n` |
@@ -18,11 +18,11 @@ are two patterns (P01, P08), one workflow (O05), one Postgres table, and n8n's o
 
 | column | meaning |
 |---|---|
-| `execution_id` | n8n execution id (unique) |
+| `execution_id` | n8n execution id (unique index `execution_log_execution_id_uidx`, created by O05's first run) |
 | `workflow_id`, `workflow_name` | the 16-char deterministic id and the `<ID> - <Title>` name |
-| `status` | `success`, `error`, `crashed`, `waiting`, `canceled` |
-| `started_at`, `finished_at`, `duration_ms` | timing |
-| `error_node`, `error_message` | populated by P01 on failure |
+| `status` | `success`, `warning`, `info` (P08), `error` (P01). O05 maps n8n's `crashed` to `error` and `canceled` to `warning`; `running` / `waiting` are not logged until they finish |
+| `started_at`, `finished_at`, `duration_ms` | timing; O05 fills whatever P08/P01 left empty |
+| `error_node`, `error_message` | populated by P01 on failure; for `warning` / `info` rows P08 stores its `notes` in `error_message` (the table has no `notes` column) |
 | `logged_at` | when the row was written |
 
 The demo schema is created on first boot from `seed/schema.sql`; `bash scripts/reseed.sh` recreates it (empties the
@@ -37,7 +37,8 @@ docker compose --profile core --profile observability up -d
 1. Open <http://localhost:3001>, create the admin user (any `@lab.local` address).
 2. Add a database: PostgreSQL, host `postgres`, port `5432`, database `demo`, user and password from
    `POSTGRES_USER` / `POSTGRES_PASSWORD` in your `.env`.
-3. Save these as questions and pin them to a dashboard.
+3. Save these as questions and pin them to a dashboard (the same SQL, plus runs-per-hour and per-status
+   breakdowns, is in `workflows/O05-execution-logs-metabase/test/metabase-queries.sql`).
 
 Failures per workflow, last 7 days:
 
