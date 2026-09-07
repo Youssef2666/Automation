@@ -125,7 +125,7 @@ lookup = execute_workflow(wf, "Lookup customer (P05)", catalog_id("P05"), mode="
                           cached_name="P05 - Lookup customer").on_error("continueErrorOutput")
 known = if_(wf, "Known customer?", [cond_bool("={{ $json.found }}")])
 wf.chain(lookup_in, lookup, known)
-wf.connect(lookup, dead_letter, out=1)      # error lane = index 1; trustworthy only one item per call (below)
+wf.connect(lookup, dead_letter, out=1)      # error lane: branch 1 for a ONE-item call - see the probes below
 ```
 
 - **mode `each` vs `once`.** P05 answers **once per call**: `Result` reads `$('Normalize input').first()` and the
@@ -171,14 +171,16 @@ worth memorising: keep the call to one item and the index is 1.
 | You need | Call shape |
 |---|---|
 | per-item error handling (route failures somewhere, keep the rest) | **one item per call**: `mode: each` with a single item, error lane on index 1 (probe A). Over many items, make many one-item calls - a Loop Over Items with batch size 1 in front of the node is probe A repeated |
-| throughput, and a failure may fail the whole run | batch call **without** an error lane (probe D/F), or `mode: once` |
+| throughput on items that cannot fail (validated upstream, read-only lookups) | a batch call is fine - probe K: 4 items, 4 results, no surprises |
+| throughput where a failure is possible | batch call **without** an error lane (probe D/F), or `mode: once`, and let the failure fail the run: loud beats lost |
 | nothing | a multi-item call **with** an error lane: E, G, H and I are silent, crashing or index-shifting |
 
 `test/harness.json` is built on that rule, and asserts it: the three valid cases go through one `each` call with
 **no** error lane (*Lookup customers (P05)*), and the bad-input case gets its own single-item call **with** the lane
 (*Lookup bad input (P05)*). The Report node reads `$('Lookup bad input (P05)').all(1)` for the error lane and
 `.all(0)` for the result lane and checks six things: three results, the two hits, the miss as data, exactly one
-item on index 1 with **nothing** on index 0, and a message that names the block.
+item on index 1 with **nothing** on index 0 - the right assertion because that call carries exactly one item -
+and a message that names the block.
 
 **Blocks and callers in this repo today** (every `execute_workflow(...)` in
 `.claude/skills/n8n-workflow-json/authoring/`):
@@ -204,7 +206,8 @@ item on index 1 with **nothing** on index 0, and a message that names the block.
   `onError: continueErrorOutput` is only reliable when the call carries one item: with a mixed batch the failing
   item disappears while the node reports success (probes E and G), with three items the lane moves to out[2]
   (probe I), and with four the node itself crashed (`assignPairedItems`) and echoed its raw input on the result
-  lane. Per-item error routing therefore costs one call per item; batching means giving up the lane.
+  lane. A batch whose items cannot fail is unaffected (probe K), so this is a cost on *fallible* work: per-item
+  error routing means one call per item, and batching means giving up the lane.
 - **A handled error is still an alert.** P05 sets `errorWorkflow: ALP01ErrorHandle`, so a refused call fires P01
   even when the caller catches it on the error lane. In the live harness run the bad-input case produced P05
   execution 861 (status *error*) and P01 execution 862 in `mode: error` in the same second, which wrote

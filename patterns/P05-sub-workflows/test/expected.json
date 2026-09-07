@@ -17,10 +17,11 @@
     "phone": null, "company": null, "country": null, "city": null, "segment": null, "lookup_by": "email",
     "lookup_value": "nobody@lab.local", "response": "no customer with email nobody@lab.local"
   },
-  "bad_input": "Stop and Error: 'P05 lookup customer: input item needs email or external_id'. With onError=continueErrorOutput on a SINGLE-item call it arrives on the caller's output index 1 as {error}; otherwise the caller fails. Either way P05's errorWorkflow fires and P01 logs the execution.",
+  "bad_input": "Stop and Error: 'P05 lookup customer: input item needs email or external_id'. With onError=continueErrorOutput on a SINGLE-item call it arrives on the caller's output branch 1 as {error}; without the lane the caller fails. Either way P05's errorWorkflow fires and P01 logs the execution.",
+  "error_lane_note": "Branch 1 holds for a one-item call. In a multi-item call the branch index moves with the batch (a 3-item call whose last item fails reports the error on branch 2), or the failing item is dropped while the node reports success, or the node crashes - see the probe table in README.md. A batch is only safe when nothing in it can fail.",
   "postgres_down": "the SELECT retries 3 x 1 s, then the block throws (same two outcomes as bad_input); the contract never returns a half-filled item",
   "harness_report": {
-    "_comment": "Report node of test/harness.json, observed on n8n 2.37.10 (execution 857): 3 results from the batch 'each' call + 1 error item on output index 1 from the single-item call.",
+    "_comment": "Report node of test/harness.json, observed on n8n 2.37.10: 3 results from the batch 'each' call (nothing in it can fail) + 1 error item on branch 1 of the separate single-item call.",
     "pass": true,
     "checks": {
       "three_results": true, "hit_by_email": true, "hit_by_external_id": true, "miss_is_data": true,

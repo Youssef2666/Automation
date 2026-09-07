@@ -130,14 +130,19 @@ Facts proven against the running stack on 2026-09-06. Add to this file whenever 
 
 ## Learned while shipping P05 (2026-09-07)
 
-- **Execute Workflow v1.1 + `onError: continueErrorOutput` is only reliable with ONE item per call.** Eight probes
-  against `ALP05SubWorkflow`: 1 bad item (`each` or `once`) -> the error item lands on **output index 1**, exactly
-  where the builder wires it; 1 good + 1 bad -> the result arrives, the **failing item vanishes** and the node
-  reports success; 2 bad -> only the first failure arrives; 3 good + 1 bad -> the node ends in error with
-  `TypeError: Cannot read properties of undefined (reading 'entries')` (`WorkflowExecute.assignPairedItems`) and
-  **echoes the raw input items on output 0**. The sub-workflow itself is fine in every case (one integrated
-  execution per item, right result / right Stop and Error). Rule: if you keep the error lane, call one item at a
-  time; if you batch, drop the lane and let a failure fail the run.
+- **Execute Workflow v1.1 + `onError: continueErrorOutput` is only dependable with ONE item per call.** Eleven
+  probes against `ALP05SubWorkflow` (`mode: each`, lane wired; lanes = items per output branch):
+  `1 bad -> [0,1]`, `1 good -> [1,0]`, `2 good -> [2,0]`, `4 good -> [4,0]` (all correct - a batch is fine when
+  nothing fails); `2 bad -> [0,1]` (only the first failure survives); `1 good + 1 bad -> [1,0]` (**the failing
+  item is dropped and the node reports success** - the dangerous one); `2 good + 1 bad (bad last) -> [2,0,1]`
+  (a **third** branch appears and the error is on index 2); `1 bad + 2 good (bad first) -> [2,1]`;
+  `3 good + 1 bad -> [4]` (crash: `TypeError: Cannot read properties of undefined (reading 'entries')` in
+  `WorkflowExecute.assignPairedItems`, the raw inputs echoed on branch 0). `mode: once` with one bad item is
+  correct (`[0,1]`), and one bad item with no lane fails the caller, as designed. So the branch count and the
+  error's index move with the batch size *and* the failing item's position - no fixed index and no formula.
+  Rule: keep the error lane only on single-item calls; batch either work that cannot fail, or without the lane.
+  A caller forced to batch must read *every* branch after 0 (what `patterns/P07-secrets/test/run.py` does).
+  The sub-workflow itself is fine in every case (one integrated execution per item, right result / Stop and Error).
 - A sub-workflow's `settings.errorWorkflow` fires even when the caller handles the failure on its error lane: a
   refused P05 call produced an integrated execution with status `error` **and** a P01 execution in `mode: error`
   that wrote the `execution_log` row (`error_message`, `error_node`). Blocks that are expected to reject input
