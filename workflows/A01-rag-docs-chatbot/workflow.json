@@ -1,0 +1,1405 @@
+{
+  "name": "A01 - RAG Chatbot over the Repo Docs",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "07480342-3800-5fda-be1f-25e4a9bbd8d4",
+      "name": "Reindex the docs (manual)",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -340,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "93d7f7ea-371d-5a23-ab24-fb881c2c8264",
+              "name": "started_at",
+              "value": "={{ $now.toISO() }}",
+              "type": "string"
+            },
+            {
+              "id": "55deeb8a-5cfb-5d85-ab16-44ac459af204",
+              "name": "collection",
+              "value": "lab_docs",
+              "type": "string"
+            },
+            {
+              "id": "e283980a-c0fa-54a4-866b-38d3c1355c47",
+              "name": "force_rebuild",
+              "value": false,
+              "type": "boolean"
+            },
+            {
+              "id": "fd2bbf75-da5f-56a7-a9a4-d401b3046379",
+              "name": "chunk_size",
+              "value": 900,
+              "type": "number"
+            },
+            {
+              "id": "d3d517af-7aa8-505c-8b39-555efda462e3",
+              "name": "chunk_overlap",
+              "value": 150,
+              "type": "number"
+            },
+            {
+              "id": "0e3ed6d6-7d29-5f19-a35a-74f10d1db398",
+              "name": "embed_batch_size",
+              "value": 16,
+              "type": "number"
+            },
+            {
+              "id": "c07290cc-56c8-53bd-bd33-ed2f69df40c6",
+              "name": "vector_size",
+              "value": 768,
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "f3b21a15-8b49-5159-849b-1a352113efcd",
+      "name": "Index settings",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -80,
+        0
+      ],
+      "notes": "Every knob of the index in one place. force_rebuild re-embeds everything (after a model or chunk-size change); vector_size is the nomic-embed-text dimension.",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "fileSelector": "/home/node/.n8n-files/docs/**/*.md",
+        "options": {
+          "dataPropertyName": "data"
+        }
+      },
+      "id": "1dac216f-72ee-575d-9b33-1db6e5aa426c",
+      "name": "Read docs/**/*.md",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        180,
+        -140
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "fileSelector": "/home/node/.n8n-files/patterns/*/README.md",
+        "options": {
+          "dataPropertyName": "data"
+        }
+      },
+      "id": "dc49baed-3cfb-57b1-b415-4f0bba1e608f",
+      "name": "Read patterns/*/README.md",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        180,
+        120
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "mode": "append",
+        "options": {}
+      },
+      "id": "ca084d08-807d-5274-81ba-2a735afbc999",
+      "name": "Corpus files",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        440,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "text",
+        "binaryPropertyName": "data",
+        "options": {
+          "keepSource": "both"
+        },
+        "destinationKey": "content"
+      },
+      "id": "47394c06-15c2-5857-902b-2d40034e0e94",
+      "name": "Extract markdown text",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        700,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// One item per markdown file. The Read node puts the path in binary.data.{directory,fileName} and the Extract\n// node was told to keep both the binary and the json, so the text and its path travel on the same item.\nconst ROOT = '/home/node/.n8n-files/';\nconst out = [];\nfor (const item of $input.all()) {\n  const bin = (item.binary && item.binary.data) || {};\n  const dir = String(bin.directory || '').replace(/\\/+$/, '');\n  const file = String(bin.fileName || '');\n  if (!file) continue;                                   // alwaysOutputData placeholder from an empty glob\n  let source = dir ? dir + '/' + file : file;\n  if (source.startsWith(ROOT)) source = source.slice(ROOT.length);   // -> docs/PRD.md, patterns/P01-.../README.md\n  let text = String(item.json.content ?? '').replace(/\\r\\n/g, '\\n');\n  // Front matter is metadata, not prose: take its title and drop the block.\n  let fmTitle = '';\n  const fm = text.match(/^---\\n([\\s\\S]*?)\\n---\\n/);\n  if (fm) {\n    const t = fm[1].match(/^title:\\s*(.+)$/m);\n    if (t) fmTitle = t[1].trim().replace(/^[\"']|[\"']$/g, '');\n    text = text.slice(fm[0].length);\n  }\n  const h1 = text.match(/^#\\s+(.+)$/m);\n  const title = String(fmTitle || (h1 ? h1[1] : file)).trim().slice(0, 120);\n  text = text.replace(/\\n{3,}/g, '\\n\\n').trim();\n  if (!text) continue;\n  out.push({ json: { source, title, text, chars: text.length } });\n}\nout.sort((a, b) => a.json.source.localeCompare(b.json.source));\nif (out.length === 0) {\n  throw new Error('corpus is empty: no readable markdown under /home/node/.n8n-files/docs or .../patterns');\n}\nreturn out;"
+      },
+      "id": "fbd34370-8530-5e72-a286-61ec8a0713bb",
+      "name": "Prepare documents",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        960,
+        0
+      ],
+      "notes": "Repo-relative source path + title per file; front matter dropped.",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "action": "hash",
+        "type": "SHA256",
+        "value": "={{ $json.text }}",
+        "dataPropertyName": "content_hash",
+        "encoding": "hex"
+      },
+      "id": "c512ee78-ca14-5cd5-aa57-1a533520e821",
+      "name": "Hash content",
+      "type": "n8n-nodes-base.crypto",
+      "typeVersion": 1,
+      "position": [
+        1220,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://qdrant:6333/collections/lab_docs/points/scroll",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          },
+          "timeout": 20000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ limit: 10000, with_payload: [\"metadata\"], with_vector: false }) }}"
+      },
+      "id": "fe64cbd9-529a-5429-8f7e-fe0ffefb75ac",
+      "name": "Index manifest (Qdrant scroll)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1480,
+        0
+      ],
+      "notes": "One call per run; a 404 (no collection yet) is data, not an error.",
+      "notesInFlow": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Compare the corpus on disk with what the collection already holds, per file, by content hash.\n// This is what makes a re-run cheap: only new and changed files are embedded again.\nconst cfg = $('Index settings').first().json;\nconst force = cfg.force_rebuild === true || cfg.force_rebuild === 'true';\nconst res = $input.first().json || {};\nconst status = Number(res.statusCode || 0);\nconst points = (((res.body || {}).result) || {}).points || [];\n\n// source -> { hash, chunks } as currently indexed\nconst indexed = new Map();\nfor (const p of points) {\n  const md = ((p || {}).payload || {}).metadata || {};\n  const src = md.source;\n  if (!src) continue;\n  const seen = indexed.get(src) || { hash: md.content_hash || null, chunks: 0 };\n  seen.chunks += 1;\n  if (!seen.hash) seen.hash = md.content_hash || null;\n  indexed.set(src, seen);\n}\n\nconst docs = $('Hash content').all().map(i => i.json);\nconst added = [], changed = [], unchanged = [];\nfor (const d of docs) {\n  const prev = indexed.get(d.source);\n  if (!prev) added.push(d.source);\n  else if (force || prev.hash !== d.content_hash) changed.push(d.source);\n  else unchanged.push(d.source);\n}\nconst onDisk = new Set(docs.map(d => d.source));\nconst removed = [...indexed.keys()].filter(s => !onDisk.has(s)).sort();\n// The chunks of a changed file go before the new ones are written, or the collection holds both versions.\nconst delete_sources = [...new Set([...changed, ...removed])].sort();\nconst embed = new Set([...added, ...changed]);\nconst files_to_embed = docs.filter(d => embed.has(d.source));\n\nconst notes = [\n  'corpus ' + docs.length + ' file(s)',\n  status === 200 ? ('index ' + indexed.size + ' file(s) / ' + points.length + ' chunk(s)')\n                 : ('index not readable (HTTP ' + status + ') - treated as empty'),\n  added.length + ' new, ' + changed.length + ' changed, ' + unchanged.length + ' unchanged, ' +\n    removed.length + ' removed',\n  force ? 'force_rebuild: every file re-embedded' : null,\n].filter(Boolean).join('; ');\n\nreturn [{ json: {\n  collection_readable: status === 200,\n  force_rebuild: force,\n  indexed_points: points.length,\n  indexed_sources: indexed.size,\n  corpus_files: docs.length,\n  corpus_chars: docs.reduce((a, d) => a + Number(d.chars || 0), 0),\n  added, changed, unchanged, removed, delete_sources,\n  delete_count: delete_sources.length,\n  embed_count: files_to_embed.length,\n  embed_chars: files_to_embed.reduce((a, d) => a + Number(d.chars || 0), 0),\n  files_to_embed,\n  plan_notes: notes,\n} }];"
+      },
+      "id": "db91ae93-7102-542f-b3fd-62b91197deae",
+      "name": "Plan the reindex",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1740,
+        0
+      ],
+      "notes": "added / changed / unchanged / removed, by SHA-256 of the file text.",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "7649eb91-63d7-5d27-ae2f-00488d31a861",
+              "leftValue": "={{ $json.delete_count }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "7aa97969-c230-526f-88d4-337727c57783",
+      "name": "Stale chunks to delete?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2000,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://qdrant:6333/collections/lab_docs/points/delete?wait=true",
+        "options": {
+          "timeout": 60000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ filter: { must: [ { key: \"metadata.source\", match: { any: $json.delete_sources } } ] } }) }}"
+      },
+      "id": "cb24a2b8-873d-5ccd-93a2-55607d01c766",
+      "name": "Delete stale chunks (Qdrant)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2260,
+        -160
+      ],
+      "notes": "Deletes by payload filter, so a changed file never leaves an older copy behind.",
+      "notesInFlow": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "d5f0bd20-3853-5798-bf0f-07df4cb1e07f",
+              "leftValue": "={{ $('Plan the reindex').first().json.embed_count }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "f168f0ce-f153-56fa-88d9-29f70858e57f",
+      "name": "Anything to embed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2520,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "http://qdrant:6333/collections/lab_docs",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          },
+          "timeout": 20000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ vectors: { size: $('Index settings').first().json.vector_size, distance: 'Cosine' } }) }}"
+      },
+      "id": "6f12e08c-cb81-59b0-aa50-ecb57f691644",
+      "name": "Create collection if missing (Qdrant)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2780,
+        -160
+      ],
+      "notes": "409 'already exists' is the normal answer from the second run on.",
+      "notesInFlow": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000
+    },
+    {
+      "parameters": {
+        "jsCode": "// Recursive character splitter (the same idea as LangChain's): break on the coarsest separator that fits,\n// then pack the pieces up to chunk_size with chunk_overlap characters carried over from the previous chunk.\n// One output item per embedding batch, so the HTTP node below makes one Ollama call per batch.\nconst cfg = $('Index settings').first().json;\nconst SIZE = Number(cfg.chunk_size) || 900;\nconst OVERLAP = Number(cfg.chunk_overlap) || 150;\nconst BATCH = Number(cfg.embed_batch_size) || 16;\nconst indexed_at = new Date().toISOString();\n\nfunction atomize(text) {\n  const out = [];\n  const push = (s) => { if (s && s.trim()) out.push(s.trim()); };\n  for (const para of text.split(/\\n{2,}/)) {\n    if (para.length <= SIZE) { push(para); continue; }\n    for (const line of para.split('\\n')) {\n      if (line.length <= SIZE) { push(line); continue; }\n      for (const sentence of line.split(/(?<=[.!?])\\s+/)) {\n        if (sentence.length <= SIZE) { push(sentence); continue; }\n        for (let i = 0; i < sentence.length; i += SIZE) push(sentence.slice(i, i + SIZE));\n      }\n    }\n  }\n  return out;\n}\n\nfunction chunk(text) {\n  const atoms = atomize(text);\n  const chunks = [];\n  let buf = [], len = 0;\n  for (const atom of atoms) {\n    if (len + atom.length + 1 > SIZE && buf.length) {\n      chunks.push(buf.join('\\n'));\n      const keep = [];\n      let k = 0;\n      for (let i = buf.length - 1; i >= 0; i--) {\n        if (k + buf[i].length + 1 > OVERLAP) break;\n        keep.unshift(buf[i]);\n        k += buf[i].length + 1;\n      }\n      buf = keep; len = k;\n    }\n    buf.push(atom); len += atom.length + 1;\n  }\n  if (buf.length) chunks.push(buf.join('\\n'));\n  return chunks.filter(c => c.trim().length > 0);\n}\n\nconst files = $('Plan the reindex').first().json.files_to_embed || [];\nconst all = [];\nfor (const d of files) {\n  const parts = chunk(String(d.text || ''));\n  parts.forEach((text, i) => all.push({\n    source: d.source, title: d.title, content_hash: d.content_hash,\n    chunk_index: i, chunk_count: parts.length, chars: text.length, text, indexed_at,\n  }));\n}\nif (all.length === 0) throw new Error('nothing to embed after chunking - check chunk_size in Index settings');\n\nconst batches = [];\nfor (let i = 0; i < all.length; i += BATCH) {\n  const slice = all.slice(i, i + BATCH);\n  batches.push({ json: {\n    batch_index: batches.length,\n    batch_count: Math.ceil(all.length / BATCH),\n    total_chunks: all.length,\n    total_files: files.length,\n    inputs: slice.map(c => c.text),\n    chunks: slice,\n  } });\n}\nreturn batches;"
+      },
+      "id": "c2b53232-01c9-5aea-8667-625cde1c5395",
+      "name": "Chunk and batch",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3040,
+        -160
+      ],
+      "notes": "Recursive character split (900 / 150), grouped into batches of 16 chunks.",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://ollama:11434/api/embed",
+        "options": {
+          "timeout": 300000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: \"nomic-embed-text:latest\", input: $json.inputs }) }}"
+      },
+      "id": "85bb50af-5029-53a4-945c-95bbb9ef81e1",
+      "name": "Embed batch (Ollama)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3300,
+        -160
+      ],
+      "notes": "One call per batch. Long timeout: Ollama runs one request at a time (OLLAMA_NUM_PARALLEL=1).",
+      "notesInFlow": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "jsCode": "// Zip each batch with its embedding response (same order in, same order out) and build Qdrant points.\n// The point id is derived from the file's content hash + the chunk index, so re-upserting identical content\n// overwrites the same points instead of adding copies - the last line of defence against duplicate vectors.\nconst batches = $('Chunk and batch').all().map(i => i.json);\nconst responses = $input.all().map(i => i.json);\nconst pointId = (hash, idx) => [\n  hash.slice(0, 8), hash.slice(8, 12), hash.slice(12, 16), hash.slice(16, 20),\n  Number(idx).toString(16).padStart(12, '0'),\n].join('-');\n\nconst out = [];\nfor (let b = 0; b < batches.length; b++) {\n  const chunks = batches[b].chunks || [];\n  const vectors = ((responses[b] || {}).embeddings) || [];\n  if (vectors.length !== chunks.length) {\n    throw new Error('batch ' + b + ': got ' + vectors.length + ' embeddings for ' + chunks.length + ' chunks');\n  }\n  const points = chunks.map((c, i) => ({\n    id: pointId(String(c.content_hash), c.chunk_index),\n    vector: vectors[i],\n    payload: {\n      content: c.text,\n      metadata: {\n        source: c.source, title: c.title, content_hash: c.content_hash,\n        chunk_index: c.chunk_index, chunk_count: c.chunk_count, indexed_at: c.indexed_at,\n      },\n    },\n  }));\n  out.push({ json: { batch_index: b, point_count: points.length, dimensions: (vectors[0] || []).length, points } });\n}\nreturn out;"
+      },
+      "id": "163c55cc-add9-5bc3-8eda-ec78f006ff85",
+      "name": "Build Qdrant points",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3560,
+        -160
+      ],
+      "notes": "Point id = file content hash + chunk index, so an upsert can never duplicate a chunk.",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "http://qdrant:6333/collections/lab_docs/points?wait=true",
+        "options": {
+          "timeout": 120000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ points: $json.points }) }}"
+      },
+      "id": "a14e2595-b778-562f-a816-fb695dec7f9b",
+      "name": "Upsert points (Qdrant)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3820,
+        -160
+      ],
+      "notes": "Deterministic ids make this idempotent, so retrying is safe.",
+      "notesInFlow": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "http://qdrant:6333/collections/lab_docs",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          },
+          "timeout": 20000
+        }
+      },
+      "id": "cb2a9a9f-adfd-5325-9c4a-d80af9a1d26e",
+      "name": "Count points (Qdrant)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4080,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Runs on both lanes: after an upsert, and after \"nothing changed\". Reads the truth back from Qdrant.\nconst cfg = $('Index settings').first().json;\nconst plan = $('Plan the reindex').first().json;\nconst res = $input.first().json || {};\nconst info = ((res.body || {}).result) || {};\nconst points = Number(info.points_count ?? 0);\nconst vectors = (((info.config || {}).params || {}).vectors) || {};\nconst duration_ms = Date.now() - new Date(cfg.started_at).getTime();\nconst touched = plan.embed_count > 0 || plan.delete_count > 0;\n\nlet chunks_written = 0;\ntry { chunks_written = $('Build Qdrant points').all().reduce((a, i) => a + Number(i.json.point_count || 0), 0); }\ncatch (e) { chunks_written = 0; }                     // the \"nothing changed\" lane never ran that node\n\nconst notes = [\n  'corpus ' + plan.corpus_files + ' file(s) / ' + plan.corpus_chars + ' chars -> ' + points +\n    ' chunk(s) in ' + cfg.collection,\n  'embedded ' + plan.embed_count + ' file(s) (' + plan.added.length + ' new, ' + plan.changed.length +\n    ' changed) = ' + chunks_written + ' chunk(s), skipped ' + plan.unchanged.length + ' unchanged',\n  plan.delete_count ? ('dropped the chunks of ' + plan.delete_count + ' file(s)') : null,\n  'took ' + Math.round(duration_ms / 1000) + ' s',\n].filter(Boolean).join('; ');\n\nreturn [{ json: {\n  collection: cfg.collection,\n  points_count: points,\n  vector_size: vectors.size ?? null,\n  distance: vectors.distance ?? null,\n  corpus_files: plan.corpus_files,\n  corpus_chars: plan.corpus_chars,\n  embedded_files: plan.embed_count,\n  embedded_chars: plan.embed_chars,\n  chunks_written,\n  deleted_sources: plan.delete_count,\n  unchanged_files: plan.unchanged.length,\n  added: plan.added,\n  changed: plan.changed,\n  removed: plan.removed,\n  force_rebuild: plan.force_rebuild,\n  duration_ms,\n  status: touched ? 'success' : 'info',\n  notes,\n} }];"
+      },
+      "id": "6819dc1f-dbb0-5c4c-bc9c-62e57ab9ddcb",
+      "name": "Index summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4340,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "37954523-0dfb-5bef-8fc4-12b69ba9c29c",
+              "name": "execution_id",
+              "value": "={{ $execution.id }}",
+              "type": "string"
+            },
+            {
+              "id": "79545b4f-dc3a-5be3-aed5-8140e9eb09af",
+              "name": "workflow_id",
+              "value": "={{ $workflow.id }}",
+              "type": "string"
+            },
+            {
+              "id": "5845c1b2-65cf-57ea-9eb1-d9be3ecf6655",
+              "name": "workflow_name",
+              "value": "={{ $workflow.name }}",
+              "type": "string"
+            },
+            {
+              "id": "31edd1d7-32df-54f0-883a-724f8d26fcc9",
+              "name": "status",
+              "value": "={{ $json.status }}",
+              "type": "string"
+            },
+            {
+              "id": "adb014e5-70d2-542d-8a17-52451b4c155d",
+              "name": "started_at",
+              "value": "={{ $('Index settings').first().json.started_at }}",
+              "type": "string"
+            },
+            {
+              "id": "5f9fe897-8008-5526-8a10-b7019fe4f35f",
+              "name": "notes",
+              "value": "={{ $json.notes }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "d54dc181-152c-5cda-921e-19dce47535cd",
+      "name": "Log input (index)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        4600,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "ALP08Observabili",
+          "mode": "id",
+          "cachedResultName": "P08 - Log execution"
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "d1acef53-6666-5a13-871b-8e0fd7e19ba9",
+      "name": "Log index run (P08)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1,
+      "position": [
+        4860,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "public": true,
+        "mode": "hostedChat",
+        "options": {
+          "title": "Automation Lab docs",
+          "subtitle": "Grounded in docs/ and the pattern READMEs - it answers or it says it cannot.",
+          "responseMode": "responseNode"
+        },
+        "initialMessages": "Ask me about the Automation Lab: the patterns, the stack, the PRD or the ADRs."
+      },
+      "id": "d976c141-1722-5fe6-b8cd-edf024817503",
+      "name": "Ask the docs (chat)",
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -340,
+        760
+      ],
+      "webhookId": "f5387d42-2ec6-5c40-9ab6-872129623d74"
+    },
+    {
+      "parameters": {
+        "jsCode": "// --- retrieval settings (the only knobs on the query path) -------------------------------------\nconst TOP_K = 6;          // chunks pulled from Qdrant\nconst MIN_SCORE = 0.45;   // cosine similarity floor; below it we say \"not in the docs\" without asking the model\nconst MAX_SOURCES = 4;    // passages shown to the model (and cited back to the user)\n// -----------------------------------------------------------------------------------------------\nconst j = $input.first().json || {};\nconst question = String(j.chatInput ?? '').replace(/\\s+/g, ' ').trim();\nreturn [{ json: {\n  question: question.slice(0, 500),\n  asked: question.length > 0,\n  session_id: j.sessionId ?? null,\n  top_k: TOP_K,\n  min_score: MIN_SCORE,\n  max_sources: MAX_SOURCES,\n  asked_at: new Date().toISOString(),\n} }];"
+      },
+      "id": "c58cd199-2e05-5528-8a52-d97a5b02499f",
+      "name": "Prepare question",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -80,
+        760
+      ],
+      "notes": "top_k, the similarity floor and how many passages the model sees.",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://ollama:11434/api/embed",
+        "options": {
+          "timeout": 120000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: \"nomic-embed-text:latest\", input: $json.question }) }}"
+      },
+      "id": "7393a820-176e-5638-8826-6a9f2938c8d2",
+      "name": "Embed question (Ollama)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        180,
+        760
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1500,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://qdrant:6333/collections/lab_docs/points/search",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          },
+          "timeout": 20000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ vector: $json.embeddings[0], limit: $('Prepare question').first().json.top_k, with_payload: true }) }}"
+      },
+      "id": "0c1b2b2c-eaff-5856-8970-ded47965391f",
+      "name": "Search the docs (Qdrant)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        760
+      ],
+      "notes": "Read-only, so retrying is safe; 404 = the index was never built.",
+      "notesInFlow": true,
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1500,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Turn the search response into a numbered context block, and decide whether there is anything worth asking.\nconst q = $('Prepare question').first().json;\nconst res = $input.first().json || {};\nconst status = Number(res.statusCode || 0);\nconst body = res.body || {};\nconst hits = [];\nif (status === 200) {\n  for (const h of (body.result || [])) {\n    const md = ((h || {}).payload || {}).metadata || {};\n    hits.push({\n      score: Number(h.score ?? 0),\n      source: String(md.source || 'unknown'),\n      title: String(md.title || ''),\n      text: String((h.payload || {}).content ?? '').trim(),\n    });\n  }\n}\nhits.sort((a, b) => b.score - a.score);\nconst kept = hits.filter(h => h.score >= q.min_score).slice(0, q.max_sources);\nconst sources = kept.map((h, i) => ({\n  n: i + 1, source: h.source, title: h.title, score: Math.round(h.score * 1000) / 1000,\n  snippet: h.text.replace(/\\s+/g, ' ').slice(0, 240),\n}));\nconst context = kept.map((h, i) =>\n  '[' + (i + 1) + '] ' + h.source + (h.title ? ' - ' + h.title : '') + '\\n' + h.text).join('\\n\\n---\\n\\n');\n\n// 404 = the collection does not exist yet (nobody has run the ingest path); anything else non-200 is a fault.\nconst reason = !q.asked ? 'not_asked'\n  : status === 404 ? 'empty_index'\n  : status !== 200 ? 'index_error'\n  : hits.length === 0 ? 'empty_index'\n  : kept.length === 0 ? 'below_threshold'\n  : 'ok';\n\nreturn [{ json: {\n  question: q.question,\n  asked: q.asked,\n  has_context: q.asked && kept.length > 0 && reason === 'ok',\n  reason,\n  detail: status === 200 ? null : ('Qdrant answered HTTP ' + status),\n  retrieved: hits.length,\n  top_score: hits.length ? Math.round(hits[0].score * 1000) / 1000 : null,\n  min_score: q.min_score,\n  sources,\n  near_misses: hits.slice(0, 3).map(h => ({ source: h.source, score: Math.round(h.score * 1000) / 1000 })),\n  context,\n  prompt: 'CONTEXT PASSAGES\\n\\n' + context + '\\n\\nQUESTION\\n' + q.question,\n} }];"
+      },
+      "id": "c5e461c3-345e-5f2e-9eb0-82a833d65234",
+      "name": "Build grounded context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        700,
+        760
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "9f5f68f8-78aa-5c2b-ac2b-1d8e6e57a975",
+              "leftValue": "={{ $json.has_context }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "0877db75-d205-5de2-8264-e50d94f6ab4a",
+      "name": "Enough context?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        960,
+        760
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.prompt }}",
+        "hasOutputParser": false,
+        "messages": {
+          "messageValues": [
+            {
+              "message": "You are the documentation assistant of the Automation Lab repository. You answer ONLY from the numbered context passages in the user message.\nRules:\n1. If the passages do not contain the answer, reply with exactly NOT_IN_DOCS and nothing else.\n2. Never add knowledge from outside the passages. Never invent file names, workflow ids, node names or numbers - if a detail is not in a passage, it does not exist.\n3. Cite the passage you used in square brackets after each statement, like this: ... a Redis INCR guard [2].\n4. Answer in at most 120 words of plain English. No headings, no preamble, no apology."
+            }
+          ]
+        }
+      },
+      "id": "d216f334-bd21-5063-939f-e563926d845e",
+      "name": "Answer from the docs (LLM)",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.4,
+      "position": [
+        1220,
+        660
+      ],
+      "notes": "One question per call, so the error lane is dependable.",
+      "notesInFlow": true,
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 2000,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "model": "llama3.2:3b",
+        "options": {
+          "temperature": 0,
+          "numCtx": 4096,
+          "numPredict": 400,
+          "keepAlive": "30m"
+        }
+      },
+      "id": "3c145a34-7d72-5c86-907c-b694400b3b15",
+      "name": "Ollama (llama3.2:3b)",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOllama",
+      "typeVersion": 1,
+      "position": [
+        1160,
+        900
+      ],
+      "notes": "numCtx 4096 fits 4 passages; keepAlive 30m keeps the model warm between questions.",
+      "notesInFlow": true,
+      "credentials": {
+        "ollamaApi": {
+          "id": "ALcredOllamaLocl",
+          "name": "Ollama - local"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Nothing above the score floor (or an empty index, or an empty message): the model is never called.\nconst c = $input.first().json;\nconst detail = c.reason === 'below_threshold'\n  ? ('best score ' + c.top_score + ' < min_score ' + c.min_score)\n  : c.reason === 'empty_index' ? 'the collection returned no chunks'\n  : c.reason === 'not_asked' ? 'empty message'\n  : (c.detail || 'the search did not answer');\nreturn [{ json: {\n  question: c.question,\n  reason: c.reason,\n  detail,\n  sources: [],\n  near_misses: c.near_misses || [],\n  retrieved: c.retrieved,\n  top_score: c.top_score,\n} }];"
+      },
+      "id": "eed9a665-a2e3-59e3-bcbc-9cefa91b72f0",
+      "name": "No grounded answer",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1220,
+        1140
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Error output of the LLM chain: Ollama unreachable, out of memory, or a reply the chain could not read.\n// One question per call, so this lane is trustworthy (see patterns/P05-sub-workflows/README.md).\nconst c = $('Build grounded context').first().json;\nconst e = $input.first().json || {};\nconst err = e.error ?? e;\nreturn [{ json: {\n  question: c.question,\n  reason: 'model_error',\n  detail: String(err?.message ?? err?.description ?? err ?? 'unknown error').replace(/\\s+/g, ' ').slice(0, 300),\n  sources: c.sources || [],\n  near_misses: c.near_misses || [],\n  retrieved: c.retrieved,\n  top_score: c.top_score,\n} }];"
+      },
+      "id": "0d24659a-438b-54a9-8fd2-985c86b3feb5",
+      "name": "Model unavailable",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1480,
+        660
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Connection-level failure of the embedding call or of the Qdrant search. The chat still answers.\nconst q = $('Prepare question').first().json;\nconst e = $input.first().json || {};\nconst err = e.error ?? e;\nreturn [{ json: {\n  question: q.question,\n  reason: 'index_error',\n  detail: String(err?.message ?? err?.description ?? err ?? 'unknown error').replace(/\\s+/g, ' ').slice(0, 300),\n  sources: [],\n  near_misses: [],\n  retrieved: 0,\n  top_score: null,\n} }];"
+      },
+      "id": "02e52893-bfe8-5ce3-92ed-9ce838434e5f",
+      "name": "Retrieval failed",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        1000
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// One shape for every path: the model's answer, or an honest refusal. Nothing here invents content.\nconst j = $input.first().json || {};\nconst fromModel = j.reason === undefined;          // the chain outputs {text}; every fallback sets a reason\n\nlet question, sources, near_misses, retrieved, top_score;\nlet detail = j.detail ?? null;\nlet answer = null;\nif (fromModel) {\n  const c = $('Build grounded context').first().json;\n  question = c.question; sources = c.sources || []; near_misses = c.near_misses || [];\n  retrieved = c.retrieved; top_score = c.top_score;\n  answer = String(j.text ?? '').trim();\n} else {\n  question = j.question; sources = j.sources || []; near_misses = j.near_misses || [];\n  retrieved = j.retrieved || 0; top_score = j.top_score ?? null;\n}\n\nconst refused = !answer || answer.toUpperCase().includes('NOT_IN_DOCS');\nconst reason = fromModel ? (refused ? 'not_in_docs' : 'ok') : j.reason;\nlet grounded = false;\nlet sources_used = [];\nlet output;\n\nif (fromModel && !refused) {\n  // Show the passages the answer actually cites; if it cited none, show everything it was given.\n  const cited = new Set((answer.match(/\\[(\\d+)\\]/g) || [])\n    .map(m => Number(m.slice(1, -1)))\n    .filter(n => n >= 1 && n <= sources.length));\n  sources_used = cited.size ? sources.filter(s => cited.has(s.n)) : sources;\n  grounded = true;\n  output = answer + '\\n\\nSources:\\n' +\n    sources_used.map(s => '[' + s.n + '] ' + s.source + (s.title ? ' - ' + s.title : '') +\n      '  (similarity ' + s.score.toFixed(3) + ')').join('\\n');\n} else {\n  const MESSAGES = {\n    not_in_docs: 'I could not answer that from the indexed Automation Lab docs. The passages I retrieved do not ' +\n                 'contain it, and I will not guess.',\n    below_threshold: 'Nothing in the indexed docs is close enough to that question, so I have no grounded answer.',\n    empty_index: 'The docs index is empty. Run the ingest path of A01 once (Reindex the docs) and ask again.',\n    not_asked: 'Ask me something about the Automation Lab docs - the patterns, the stack, the PRD or the ADRs.',\n    model_error: 'The local model did not return an answer, so there is nothing I can ground. Try again in a moment.',\n    index_error: 'I could not reach the docs index, so I have no passages to answer from.',\n  };\n  output = MESSAGES[reason] || 'I have no grounded answer for that.';\n  if (sources.length) {\n    output += '\\n\\nPassages I did retrieve:\\n' +\n      sources.map(s => '[' + s.n + '] ' + s.source + '  (similarity ' + s.score.toFixed(3) + ')').join('\\n');\n  } else if (near_misses.length) {\n    output += '\\n\\nClosest passages, below the ' + $('Prepare question').first().json.min_score + ' floor:\\n' +\n      near_misses.map(h => '- ' + h.source + '  (similarity ' + h.score.toFixed(3) + ')').join('\\n');\n  }\n  if (detail) output += '\\n\\n(' + detail + ')';\n}\n\nreturn [{ json: {\n  output,\n  grounded,\n  reason,\n  question,\n  sources_used,\n  sources_retrieved: sources.length,\n  chunks_searched: retrieved,\n  top_score,\n  detail,\n  model: 'llama3.2:3b',\n  collection: 'lab_docs',\n  answered_at: new Date().toISOString(),\n} }];"
+      },
+      "id": "98b32de3-f6a7-5604-980d-d2695db1387f",
+      "name": "Reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1740,
+        760
+      ],
+      "notes": "Adds the Sources block and turns NOT_IN_DOCS into a plain refusal.",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "options": {},
+        "responseBody": "={{ $json }}"
+      },
+      "id": "b3832ac5-9a84-5a3d-a9a0-8bb3bdfe4cf9",
+      "name": "Respond to chat",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        2000,
+        760
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "0129a6ea-fdac-5772-9cd8-d77c41103184",
+              "name": "execution_id",
+              "value": "={{ $execution.id }}",
+              "type": "string"
+            },
+            {
+              "id": "ce1a7f4e-620b-5e22-8f68-2f79abead324",
+              "name": "workflow_id",
+              "value": "={{ $workflow.id }}",
+              "type": "string"
+            },
+            {
+              "id": "a9b247ac-b67c-5083-b70c-cd7d299bfc79",
+              "name": "workflow_name",
+              "value": "={{ $workflow.name }}",
+              "type": "string"
+            },
+            {
+              "id": "bf4faca4-480c-5c7b-a6f5-cc0540148902",
+              "name": "status",
+              "value": "={{ $('Reply').first().json.grounded ? 'success' : (['model_error','index_error'].includes($('Reply').first().json.reason) ? 'error' : 'warning') }}",
+              "type": "string"
+            },
+            {
+              "id": "b6c1ecac-f914-5e32-802e-ae17b14707a3",
+              "name": "started_at",
+              "value": "={{ $('Prepare question').first().json.asked_at }}",
+              "type": "string"
+            },
+            {
+              "id": "476d48ac-2bbe-5b35-bda2-2da4d4b0400d",
+              "name": "notes",
+              "value": "={{ $('Reply').first().json.reason + ' | q: ' + $('Reply').first().json.question + ' | ' + $('Reply').first().json.sources_used.length + ' source(s), top score ' + $('Reply').first().json.top_score }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "81e4e315-a1a6-50ed-a6c7-3b87241826e5",
+      "name": "Log input (question)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2260,
+        760
+      ]
+    },
+    {
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "ALP08Observabili",
+          "mode": "id",
+          "cachedResultName": "P08 - Log execution"
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "74c532c8-deee-5b12-805c-a449f593e83b",
+      "name": "Log question (P08)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1,
+      "position": [
+        2520,
+        760
+      ],
+      "notes": "After the response: logging a question must never break the conversation.",
+      "notesInFlow": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "content": "## A01 - RAG over this repository's own docs\n**Top row - ingest** (manual, an operator action). `docs/**/*.md` + `patterns/*/README.md` -> text -> SHA-256 per file -> compare with what `lab_docs` already holds -> delete the chunks of changed and removed files -> chunk and embed only new and changed files with **nomic-embed-text** -> upsert -> one `execution_log` row.\n**Bottom row - query** (chat). Question -> embed -> top 6 chunks from Qdrant -> keep what clears the similarity floor -> **llama3.2:3b** answers *only* from those passages -> the reply carries them with their scores.\n\nEverything is local: Ollama + Qdrant, no API key, no cloud embeddings, ~8 GB RAM.\nPatterns: **P01** (error workflow), **P08** (one `execution_log` row per index run and per question).",
+        "height": 340,
+        "width": 1080,
+        "color": 4
+      },
+      "id": "56bd6b9d-9074-500c-9542-9cbeabaf8e16",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -400,
+        -540
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Re-running does not duplicate vectors\n*Plan the reindex* compares the SHA-256 of each file with the `content_hash` stored on its chunks:\n* **new** -> embed\n* **changed** -> delete its chunks by payload filter, then embed\n* **removed from disk** -> delete its chunks\n* **unchanged** -> nothing at all\n\nA second run with no edits embeds 0 files and takes seconds. And because a point id is derived from `content_hash + chunk_index`, even a re-upsert of the same text overwrites the same points.\n`force_rebuild: true` in *Index settings* re-embeds everything.",
+        "height": 400,
+        "width": 620,
+        "color": 3
+      },
+      "id": "2ec9fe61-1196-5096-8f0b-8137ddb57eaf",
+      "name": "Sticky Note 2",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1700,
+        -600
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Why HTTP nodes and not the Qdrant Vector Store node\n`vectorStoreQdrant` bundles `@qdrant/js-client-rest`, which hands an **undici 6** Agent to Node 26's built-in `fetch` (undici 7). Every call dies with `TypeError: fetch failed` / `InvalidArgumentError: invalid onError method` - reproduced on this stack in both the main process and the CLI.\n\nSo the vector store is assembled from HTTP + Code nodes against the Qdrant REST API, writing the **same payload shape** (`content` + `metadata`) the LangChain node would write. When the client is fixed upstream, the node drops back in over the same collection.",
+        "height": 400,
+        "width": 660,
+        "color": 6
+      },
+      "id": "c914bafc-7a29-5ec4-84e8-bdf1c1e5d6c7",
+      "name": "Sticky Note 3",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2740,
+        -600
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Grounded, or it says so\nThree guards, in this order:\n1. **Similarity floor** (`min_score` in *Prepare question*): nothing close enough -> the model is never called.\n2. **The contract in the prompt**: answer only from the numbered passages, else reply `NOT_IN_DOCS`. *Reply* turns that marker into a plain refusal.\n3. **Citations**: only the passages the answer actually cites are printed, with their scores - so a reader can check the claim against the file.\n\nA failed search, a failed embedding call or an unusable model answer takes its own lane and still ends in a normal chat reply; the `execution_log` row carries the reason (`success` / `warning` / `error`).",
+        "height": 300,
+        "width": 1080,
+        "color": 5
+      },
+      "id": "d396c255-7f30-5992-bf62-6f799c4c0c79",
+      "name": "Sticky Note 4",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -400,
+        380
+      ]
+    }
+  ],
+  "connections": {
+    "Reindex the docs (manual)": {
+      "main": [
+        [
+          {
+            "node": "Index settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Index settings": {
+      "main": [
+        [
+          {
+            "node": "Read docs/**/*.md",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Read patterns/*/README.md",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read docs/**/*.md": {
+      "main": [
+        [
+          {
+            "node": "Corpus files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read patterns/*/README.md": {
+      "main": [
+        [
+          {
+            "node": "Corpus files",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Corpus files": {
+      "main": [
+        [
+          {
+            "node": "Extract markdown text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract markdown text": {
+      "main": [
+        [
+          {
+            "node": "Prepare documents",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare documents": {
+      "main": [
+        [
+          {
+            "node": "Hash content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Hash content": {
+      "main": [
+        [
+          {
+            "node": "Index manifest (Qdrant scroll)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Index manifest (Qdrant scroll)": {
+      "main": [
+        [
+          {
+            "node": "Plan the reindex",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Plan the reindex": {
+      "main": [
+        [
+          {
+            "node": "Stale chunks to delete?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Stale chunks to delete?": {
+      "main": [
+        [
+          {
+            "node": "Delete stale chunks (Qdrant)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Anything to embed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete stale chunks (Qdrant)": {
+      "main": [
+        [
+          {
+            "node": "Anything to embed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Anything to embed?": {
+      "main": [
+        [
+          {
+            "node": "Create collection if missing (Qdrant)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Count points (Qdrant)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create collection if missing (Qdrant)": {
+      "main": [
+        [
+          {
+            "node": "Chunk and batch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chunk and batch": {
+      "main": [
+        [
+          {
+            "node": "Embed batch (Ollama)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embed batch (Ollama)": {
+      "main": [
+        [
+          {
+            "node": "Build Qdrant points",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Qdrant points": {
+      "main": [
+        [
+          {
+            "node": "Upsert points (Qdrant)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upsert points (Qdrant)": {
+      "main": [
+        [
+          {
+            "node": "Count points (Qdrant)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Count points (Qdrant)": {
+      "main": [
+        [
+          {
+            "node": "Index summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Index summary": {
+      "main": [
+        [
+          {
+            "node": "Log input (index)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log input (index)": {
+      "main": [
+        [
+          {
+            "node": "Log index run (P08)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ollama (llama3.2:3b)": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Answer from the docs (LLM)",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ask the docs (chat)": {
+      "main": [
+        [
+          {
+            "node": "Prepare question",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare question": {
+      "main": [
+        [
+          {
+            "node": "Embed question (Ollama)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embed question (Ollama)": {
+      "main": [
+        [
+          {
+            "node": "Search the docs (Qdrant)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Retrieval failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search the docs (Qdrant)": {
+      "main": [
+        [
+          {
+            "node": "Build grounded context",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Retrieval failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build grounded context": {
+      "main": [
+        [
+          {
+            "node": "Enough context?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enough context?": {
+      "main": [
+        [
+          {
+            "node": "Answer from the docs (LLM)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No grounded answer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Answer from the docs (LLM)": {
+      "main": [
+        [
+          {
+            "node": "Reply",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Model unavailable",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "No grounded answer": {
+      "main": [
+        [
+          {
+            "node": "Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Model unavailable": {
+      "main": [
+        [
+          {
+            "node": "Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Retrieval failed": {
+      "main": [
+        [
+          {
+            "node": "Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reply": {
+      "main": [
+        [
+          {
+            "node": "Respond to chat",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond to chat": {
+      "main": [
+        [
+          {
+            "node": "Log input (question)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log input (question)": {
+      "main": [
+        [
+          {
+            "node": "Log question (P08)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Africa/Tripoli",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "ALP01ErrorHandle",
+    "executionTimeout": 1800
+  },
+  "pinData": {},
+  "versionId": "fc427fe6-d761-5ebf-959e-bcefff09abcc",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "description": "Indexes the repository's own markdown into a local Qdrant collection with nomic-embed-text (incrementally, by content hash) and answers questions about it with llama3.2:3b, quoting the chunks it used and refusing when the docs do not contain the answer."
+  },
+  "id": "ALA01RagDocsChat",
+  "tags": [
+    {
+      "name": "automation-lab"
+    },
+    {
+      "name": "AI"
+    }
+  ]
+}

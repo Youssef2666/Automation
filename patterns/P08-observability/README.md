@@ -136,6 +136,7 @@ filled from the n8n API and charted in Metabase.
 - `O05 - Execution Logs to Postgres to Metabase` (logs its own sync runs; backfills everything else)
 - `M04 - DB Threshold Alert` (`info` when all within thresholds, `warning` on a breach, alerted or suppressed)
 - `D05 - Scheduled DB Dump to MinIO with Rotation` (one `success` row per dump; the run notes carry the tables, rows and rotation counts)
+- `A01 - RAG Chatbot over the Repo Docs` (`success`/`info` per ingest with the chunk counts, and one row per question with the top similarity score; `warning` below the floor, `error` when Qdrant or the model is down)
 - `A02 - Ticket Classification and Routing` (one row per triage run; `info` on an empty queue, `warning` when any ticket lands on the review lane)
 - `A03 - Audio to Transcript, Summary and Task List` (`success` with the task count, `warning` when the transcript fails the quality gate)
 - `P01 - Global Error Handler` (writes the `error` rows to the same table directly, same vocabulary)

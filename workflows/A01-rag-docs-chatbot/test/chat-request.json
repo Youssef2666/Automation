@@ -1,0 +1,5 @@
+{
+  "action": "sendMessage",
+  "sessionId": "lab-demo-001",
+  "chatInput": "How does the idempotency pattern avoid processing the same webhook twice?"
+}

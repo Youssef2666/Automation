@@ -1,0 +1,50 @@
+{
+  "collection": "lab_docs",
+  "corpus": "docs/**/*.md + patterns/*/README.md (22 files, ~115 kB, 177 chunks on 2026-09-07)",
+  "settings": { "top_k": 6, "min_score": 0.45, "max_sources": 4, "chunk_size": 900, "chunk_overlap": 150 },
+  "note": "Answers come from llama3.2:3b, so the wording changes between runs. What must not change is `reason`, `grounded` and which file the citation points at. `observed` is a real answer captured on 2026-09-07.",
+  "questions": [
+    {
+      "id": "q1-grounded-pattern",
+      "chatInput": "How does the idempotency pattern avoid processing the same webhook twice?",
+      "expect": { "grounded": true, "reason": "ok", "cites": "patterns/P03-idempotency/README.md", "top_score_at_least": 0.6 },
+      "observed": "Every inbound event carries an external id. Before the side effect, the workflow asks a shared store \"have I seen <scope>:<external_id>?\" in one atomic operation. First time -> proceed; seen before -> answer success without doing the work again [2].  (similarity 0.695; 43 s with a cold model, 8 s warm)"
+    },
+    {
+      "id": "q2-grounded-error-handler",
+      "chatInput": "What does the global error handler P01 do when a workflow fails?",
+      "expect": { "grounded": true, "reason": "ok", "cites": "patterns/P01-error-handler/README.md", "top_score_at_least": 0.7 },
+      "observed": "When a workflow fails, the global error handler P01 writes a structured row to `execution_log` and alerts a human once per workflow per 10 minutes [2]. Repeats within that window are still logged, never e-mailed [2].  (similarity 0.757, 30 s)"
+    },
+    {
+      "id": "q3-grounded-sub-workflow-rule",
+      "chatInput": "What is the rule about an Execute Workflow error lane and batch size?",
+      "expect": { "grounded": true, "reason": "ok", "cites": "patterns/P05-sub-workflows/README.md", "top_score_at_least": 0.65 },
+      "observed": "A batch call with an error lane loses failures [2].  (similarity 0.711, 32 s - correct but terse: a 3B model compresses hard)"
+    },
+    {
+      "id": "q4-plausible-but-absent",
+      "chatInput": "What is the refund policy for enterprise customers?",
+      "expect": { "grounded": false, "reason": "not_in_docs" },
+      "observed": "I could not answer that from the indexed Automation Lab docs. The passages I retrieved do not contain it, and I will not guess. + the four passages it looked at (0.495-0.511). 28 s: the model was called and refused."
+    },
+    {
+      "id": "q5-off-topic",
+      "chatInput": "Who won the 2018 FIFA World Cup?",
+      "expect": { "grounded": false, "reason": "below_threshold" },
+      "observed": "Nothing in the indexed docs is close enough to that question, so I have no grounded answer. + the three closest passages (0.405-0.420). 0.8 s: the similarity floor answered without touching the model."
+    },
+    {
+      "id": "q6-empty-message",
+      "chatInput": "   ",
+      "expect": { "grounded": false, "reason": "not_asked" },
+      "observed": "Ask me something about the Automation Lab docs - the patterns, the stack, the PRD or the ADRs. (empty message)"
+    },
+    {
+      "id": "q7-known-weakness-table-lookup",
+      "chatInput": "Which port does Mailpit listen on for SMTP inside the stack?",
+      "expect": { "grounded": true, "reason": "ok", "answer_is_correct": false },
+      "observed": "\"Mailpit listens on port 8025 for SMTP\" citing docs/decisions/0003-local-services-instead-of-saas.md (0.584). WRONG: SMTP is 1025, 8025 is the web inbox. The right answer is a markdown table row in docs/PRD.md (`| mailpit | core | 8025 / 1025 | ...`) which never enters the top 10 for this question - dense retrieval is bad at table rows, and the 3B model then filled the gap with a number the passage did not contain. Kept in this file on purpose: it is the honest ceiling of a 3B model plus a pure dense retriever. See Notes & trade-offs."
+    }
+  ]
+}

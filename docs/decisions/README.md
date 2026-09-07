@@ -17,6 +17,7 @@ reverse-engineer from the compose file. One file per decision, 15 lines max, nev
 | [0007](0007-compose-file-at-repo-root.md) | Compose file at the repo root, image sources under docker/ | accepted |
 | [0008](0008-p07-ships-a-credential-backed-sub-workflow.md) | P07 ships a credential-backed sub-workflow next to the docs; mock-api `/secure/ping` | accepted |
 | [0009](0009-sub-workflow-error-lane-needs-single-item-calls.md) | An Execute Workflow error lane is only trusted on single-item calls | accepted |
+| [0010](0010-qdrant-vector-store-via-http-not-the-langchain-node.md) | A01 talks to Qdrant over HTTP; the LangChain vector store node is broken in the pinned image | accepted |
 
 ## Template
 

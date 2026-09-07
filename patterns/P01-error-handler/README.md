@@ -101,6 +101,7 @@ Every workflow in the catalog (`settings.errorWorkflow`). Direct references in f
 - `R02 - Bulk Certificate Generation from CSV`
 - `R03 - Data to Arabic RTL DOCX/PPTX Report`
 - `R04 - PDF to Structured Fields to Dataset`
+- `A01 - RAG Chatbot over the Repo Docs`
 - `A02 - Ticket Classification and Routing`
 - `A03 - Audio to Transcript, Summary and Task List`
 - `O05 - Execution Logs to Postgres to Metabase`

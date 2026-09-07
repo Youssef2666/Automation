@@ -69,7 +69,7 @@ current screenshot and passes `scripts/validate.py` (see [CONTRIBUTING.md](CONTR
 
 Generated from each folder's README front-matter. Do not edit between the markers.
 
-<!-- STATS:START -->**23 of 36 workflows shipped · 8 of 8 patterns**<!-- STATS:END -->
+<!-- STATS:START -->**24 of 36 workflows shipped · 8 of 8 patterns**<!-- STATS:END -->
 
 <!-- MATRIX:START -->
 ### Triggers (6/7 shipped)
@@ -113,11 +113,11 @@ Generated from each folder's README front-matter. Do not edit between the marker
 | R03 | [Data to Arabic RTL DOCX/PPTX Report](workflows/R03-arabic-rtl-report/) | Advanced | [P01](patterns/P01-error-handler/) | core, docs | ✅ shipped |
 | R04 | [PDF to Structured Fields to Dataset](workflows/R04-pdf-to-dataset/) | Advanced | [P01](patterns/P01-error-handler/) | core, docs | ✅ shipped |
 
-### AI (2/6 shipped)
+### AI (3/6 shipped)
 
 | ID | Workflow | Difficulty | Patterns | Services | Status |
 |---|---|---|---|---|---|
-| A01 | [RAG Chatbot over Repo Docs](workflows/A01-rag-docs-chatbot/) | Advanced | - | - | 📋 planned |
+| A01 | [RAG Chatbot over the Repo Docs](workflows/A01-rag-docs-chatbot/) | Advanced | [P01](patterns/P01-error-handler/), [P08](patterns/P08-observability/) | core, ai | ✅ shipped |
 | A02 | [Ticket Classification and Routing](workflows/A02-ticket-classifier/) | Advanced | [P01](patterns/P01-error-handler/), [P08](patterns/P08-observability/) | core, ai | ✅ shipped |
 | A03 | [Audio to Transcript, Summary and Task List](workflows/A03-audio-to-tasks/) | Advanced | [P01](patterns/P01-error-handler/), [P08](patterns/P08-observability/) | core, ai | ✅ shipped |
 | A04 | Arabic OCR to Structured Data | Advanced | - | - | 📋 planned |
@@ -151,14 +151,14 @@ Each pattern documents a failure story, the rule, its n8n implementation, the tr
 <!-- PATTERNS:START -->
 | ID | Pattern | Used by | Status |
 |---|---|---|---|
-| P01 | [Global Error Handler](patterns/P01-error-handler/) | [A02](workflows/A02-ticket-classifier/), [A03](workflows/A03-audio-to-tasks/), [D01](workflows/D01-csv-import-validation/), [D02](workflows/D02-web-scrape-to-json/), [D03](workflows/D03-multi-source-aggregation/), [D04](workflows/D04-incremental-sync/), [D05](workflows/D05-db-dump-to-minio/), [M01](workflows/M01-uptime-monitor/), [M02](workflows/M02-github-events-to-chat/), [M03](workflows/M03-rss-keyword-digest/), [M04](workflows/M04-db-threshold-alert/), [M05](workflows/M05-exchange-rate-watcher/), [O05](workflows/O05-execution-logs-metabase/), [R01](workflows/R01-pdf-invoice/), [R02](workflows/R02-bulk-certificates/), [R03](workflows/R03-arabic-rtl-report/), [R04](workflows/R04-pdf-to-dataset/), [T01](workflows/T01-webhook-to-database/), [T02](workflows/T02-daily-digest/), [T03](workflows/T03-api-polling/), [T04](workflows/T04-imap-attachment-parser/), [T05](workflows/T05-form-to-record/), [T06](workflows/T06-file-watcher/) | ✅ shipped |
+| P01 | [Global Error Handler](patterns/P01-error-handler/) | [A01](workflows/A01-rag-docs-chatbot/), [A02](workflows/A02-ticket-classifier/), [A03](workflows/A03-audio-to-tasks/), [D01](workflows/D01-csv-import-validation/), [D02](workflows/D02-web-scrape-to-json/), [D03](workflows/D03-multi-source-aggregation/), [D04](workflows/D04-incremental-sync/), [D05](workflows/D05-db-dump-to-minio/), [M01](workflows/M01-uptime-monitor/), [M02](workflows/M02-github-events-to-chat/), [M03](workflows/M03-rss-keyword-digest/), [M04](workflows/M04-db-threshold-alert/), [M05](workflows/M05-exchange-rate-watcher/), [O05](workflows/O05-execution-logs-metabase/), [R01](workflows/R01-pdf-invoice/), [R02](workflows/R02-bulk-certificates/), [R03](workflows/R03-arabic-rtl-report/), [R04](workflows/R04-pdf-to-dataset/), [T01](workflows/T01-webhook-to-database/), [T02](workflows/T02-daily-digest/), [T03](workflows/T03-api-polling/), [T04](workflows/T04-imap-attachment-parser/), [T05](workflows/T05-form-to-record/), [T06](workflows/T06-file-watcher/) | ✅ shipped |
 | P02 | [Retry with Exponential Backoff](patterns/P02-retry-backoff/) | [D03](workflows/D03-multi-source-aggregation/), [D04](workflows/D04-incremental-sync/), [M05](workflows/M05-exchange-rate-watcher/), [T03](workflows/T03-api-polling/) | ✅ shipped |
 | P03 | [Idempotency](patterns/P03-idempotency/) | [D04](workflows/D04-incremental-sync/), [M02](workflows/M02-github-events-to-chat/), [T01](workflows/T01-webhook-to-database/) | ✅ shipped |
 | P04 | [Rate Limiting and Batching](patterns/P04-rate-limiting/) | [D02](workflows/D02-web-scrape-to-json/), [D03](workflows/D03-multi-source-aggregation/) | ✅ shipped |
 | P05 | [Sub-workflow modularity](patterns/P05-sub-workflows/) | - | ✅ shipped |
 | P06 | [Testing and Mock Payloads](patterns/P06-testing/) | [M02](workflows/M02-github-events-to-chat/), [T05](workflows/T05-form-to-record/) | ✅ shipped |
 | P07 | [Secrets in a Public Repo](patterns/P07-secrets/) | [M02](workflows/M02-github-events-to-chat/), [T01](workflows/T01-webhook-to-database/) | ✅ shipped |
-| P08 | [Observability](patterns/P08-observability/) | [A02](workflows/A02-ticket-classifier/), [A03](workflows/A03-audio-to-tasks/), [D05](workflows/D05-db-dump-to-minio/), [M01](workflows/M01-uptime-monitor/), [M04](workflows/M04-db-threshold-alert/), [O05](workflows/O05-execution-logs-metabase/) | ✅ shipped |
+| P08 | [Observability](patterns/P08-observability/) | [A01](workflows/A01-rag-docs-chatbot/), [A02](workflows/A02-ticket-classifier/), [A03](workflows/A03-audio-to-tasks/), [D05](workflows/D05-db-dump-to-minio/), [M01](workflows/M01-uptime-monitor/), [M04](workflows/M04-db-threshold-alert/), [O05](workflows/O05-execution-logs-metabase/) | ✅ shipped |
 <!-- PATTERNS:END -->
 
 ## Profiles

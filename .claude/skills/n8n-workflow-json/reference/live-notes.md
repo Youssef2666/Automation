@@ -215,3 +215,53 @@ Facts proven against the running stack on 2026-09-06. Add to this file whenever 
 - `n8n execute --id` also refuses `N8N_RUNNERS_BROKER_PORT=5680` when another agent's CLI run holds it; any free
   port works (`5684`). Deleting a workflow through `DELETE /api/v1/workflows/<id>` deletes its executions too, so
   capture what a throwaway probe printed *before* removing it.
+
+## Learned while shipping A01 (2026-09-07, Qdrant + RAG)
+
+- **The Qdrant Vector Store node is broken in this image - do not use it.** `vectorStoreQdrant` (any mode) fails
+  with `TypeError: fetch failed`; the container log shows the real cause,
+  `InvalidArgumentError: invalid onError method` thrown from
+  `@qdrant/openapi-typescript-fetch/.../fetcher.js:135`. `@qdrant/js-client-rest@1.16.2` builds an
+  **undici 6.28** `Agent` (`dispatcher.js`) and passes it as `init.dispatcher` to Node **26.5**'s built-in
+  `fetch`, whose handler uses undici 7's API - the old Agent rejects it. Reproduced in the main process and in
+  the `n8n execute` CLI, against a Qdrant that `wget` and the HTTP Request node reach fine from the same
+  container. Same root cause will hit any node bundling that client. Workaround used by A01: drive Qdrant over
+  its REST API with HTTP Request nodes (scroll / points/delete / PUT collection / points upsert / points/search)
+  and write the same payload shape the LangChain node writes (`{content, metadata:{...}}`,
+  `contentPayloadKey`/`metadataPayloadKey` defaults), so the node can be swapped back in later over the same
+  collection. `lmChatOllama` + `chainLlm` are unaffected.
+- **n8n 2.x runs the *published* version of a workflow.** `PATCH /rest/workflows/<id>` (and the editor) changes
+  the draft only: an active trigger keeps executing the old nodes until you publish
+  (`scripts/dev/publish.py <id>`, or `import-workflows.sh --publish`). Deactivate/activate does **not** promote
+  the draft. This is what makes "I changed the model name and nothing happened" look like caching.
+- Ollama's batch embedding endpoint is much faster than one call per chunk:
+  `POST http://ollama:11434/api/embed {model, input: ["...", "..."]}` -> `{embeddings: [[768 floats], ...]}`,
+  in input order. 3 texts in 0.15 s; 177 chunks of ~900 chars in ~60 s in batches of 16 (`nomic-embed-text`,
+  137M, CPU). The older `/api/embeddings` takes a single `prompt` instead.
+- An HTTP Request node runs **once per input item**, so "one Code node that emits one item per batch" is a
+  complete batching mechanism - no Loop Over Items needed. Re-pair the responses with their batches by index
+  (`$('Chunk and batch').all()[i]` vs `$input.all()[i]`); paired-item lookups are not reliable one node after a
+  Code node that returned fresh items.
+- Qdrant point ids must be an unsigned int or a **UUID-shaped** hex string (`8-4-4-4-12`); Qdrant's parser does
+  not check the version nibble, so `sha256.slice(0,20)` + `chunkIndex.toString(16).padStart(12,'0')` is a legal,
+  deterministic id. That alone makes an upsert idempotent - re-indexing identical content cannot duplicate it.
+  `points/delete` by payload filter (`{key: "metadata.source", match: {any: [...]}}`) needs no payload index at
+  this scale. `PUT /collections/<name>` on an existing collection answers 4xx `Collection ... already exists!`,
+  so pair it with `neverError`.
+- `Read/Write File` (read) puts the **directory** on the binary metadata (`binary.data.directory` +
+  `.fileName`), not on the json (json only gets `mimeType, fileType, fileName, fileExtension, fileSize`). With a
+  glob over several directories that is the only way to tell `patterns/P01-.../README.md` from
+  `patterns/P02-.../README.md`. `Extract From File` with `options.keepSource: "both"` keeps the binary next to
+  the extracted text, so one Code node afterwards sees both; `destinationKey` is a **top-level** parameter of
+  that node, not an option.
+- `alwaysOutputData` and `onError: continueErrorOutput` on the same node fight each other: the empty placeholder
+  item appears on output 0 **and** the error item on output 1, so both branches run. Pick one.
+- Chat Trigger v1.1 with `options.responseMode: "responseNode"` works with a plain
+  `n8n-nodes-base.respondToWebhook` node (`respondWith: json`, `responseBody: "={{ $json }}"`), and the flow
+  keeps running after it - which is how a chat workflow can log to P08 *after* answering. The production URL is
+  `POST /webhook/<webhookId>/chat` with `{action:"sendMessage", sessionId, chatInput}`; the builder derives
+  `webhookId` from the workflow id, so the URL is stable across re-imports.
+- CPU RAG latency measured here: retrieval (embed + Qdrant search) under 200 ms; the answer is all generation -
+  8 s warm and short, ~30 s typical, 43 s when `llama3.2:3b` has to load. `numCtx` defaults to **2048** on
+  `lmChatOllama`, which silently truncates four 900-char passages plus a system prompt; A01 sets 4096.
+  `keepAlive: "30m"` on the node keeps the model resident between questions.
