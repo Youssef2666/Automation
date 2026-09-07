@@ -6,6 +6,6 @@ weasyprint~=62.3
 pydyf~=0.10.0   # weasyprint 62 needs the pre-0.11 pydyf API
 python-docx~=1.1.2
 python-pptx~=1.0.2
-pdfplumber~=0.11.4
+pdfplumber~=0.11.10
 pytesseract~=0.3.13
 pillow~=10.4
