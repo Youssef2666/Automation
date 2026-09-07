@@ -84,8 +84,22 @@ Every workflow in the catalog (`settings.errorWorkflow`). Direct references in f
 - `T01 - Webhook to Database`
 - `T02 - Scheduled Daily Digest`
 - `T03 - Polling an API Without Webhooks`
+- `T04 - IMAP Email Trigger to Attachment Parser`
+- `T05 - Form Trigger to Record and Confirmation Email`
+- `T06 - File Watcher: Process on Drop`
 - `D01 - CSV/XLSX Import with Row-level Validation`
 - `D02 - Web Scrape to Structured JSON`
+- `D03 - Multi-source API Aggregation`
 - `D04 - Incremental Sync with Upsert and Dedupe`
+- `M01 - Uptime Monitor with Escalation`
 - `M02 - GitHub Events to Chat Notification`
+- `M03 - RSS Keyword-filtered Digest`
+- `M04 - DB Threshold Alert`
 - `M05 - Price / Exchange-rate Watcher`
+- `R01 - Data to PDF Invoice`
+- `R02 - Bulk Certificate Generation from CSV`
+- `R03 - Data to Arabic RTL DOCX/PPTX Report`
+- `R04 - PDF to Structured Fields to Dataset`
+- `O05 - Execution Logs to Postgres to Metabase`
+
+The other patterns (P02, P03, P04, P06, P07, P08) also set P01 as their error workflow.
