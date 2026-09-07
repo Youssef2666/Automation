@@ -1,0 +1,684 @@
+{
+  "name": "D04 - Incremental Sync with Upsert and Dedupe",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 15
+            }
+          ]
+        }
+      },
+      "id": "93bd010f-9c88-5e49-8b54-380a17bad4e3",
+      "name": "Every 15 minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "bdce070f-63a2-5214-a087-16fdf32adb2a",
+      "name": "Run once (manual / CLI)",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "311417d7-5e1c-5d2c-b6d2-36e55f3ddd1f",
+              "name": "source",
+              "value": "mock-api-products",
+              "type": "string"
+            },
+            {
+              "id": "d4c2f35c-4f00-585d-ac3a-b50954026914",
+              "name": "url",
+              "value": "http://mock-api:8080/products",
+              "type": "string"
+            },
+            {
+              "id": "9d6db3f0-d259-599d-9c2f-bfaf90164b12",
+              "name": "page_limit",
+              "value": 500,
+              "type": "number"
+            },
+            {
+              "id": "0f840e80-d1b2-5759-b9ef-5bc00546e2e2",
+              "name": "epoch",
+              "value": "1970-01-01T00:00:00Z",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "ab33b6ed-9ead-541d-bf96-fcdc9832dc7a",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        260,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT cursor, rows_seen, last_run_at FROM sync_state WHERE source = $1",
+        "options": {
+          "queryReplacement": "={{ $json.source }}"
+        }
+      },
+      "id": "104b0d05-16d1-5924-82e7-db35fb122a31",
+      "name": "Read watermark",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        520,
+        0
+      ],
+      "notes": "No row yet -> empty item -> epoch cursor (first run pulls everything).",
+      "notesInFlow": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "ALcredPostgresDm",
+          "name": "Postgres - demo"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "9d57518c-eadd-5461-80ec-db12ebf4b0e6",
+              "name": "url",
+              "value": "={{ $('Config').first().json.url }}",
+              "type": "string"
+            },
+            {
+              "id": "a85a0bde-5a88-525a-bff1-2ba3ebc6bbda",
+              "name": "query",
+              "value": "={{ { updated_at_gte: $json.cursor || $('Config').first().json.epoch, _sort: 'updated_at', _order: 'asc', _limit: $('Config').first().json.page_limit } }}",
+              "type": "object"
+            },
+            {
+              "id": "417c554b-0eb8-5da6-9306-077c4fbfc1b5",
+              "name": "max_attempts",
+              "value": 5,
+              "type": "number"
+            },
+            {
+              "id": "2282af9d-fc66-57d5-a803-a97ebe139fc5",
+              "name": "base_ms",
+              "value": 500,
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "f8a2e2f1-0208-5aa4-8fde-81357adb2f43",
+      "name": "Source request",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        780,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "ALP02RetryBackof",
+          "mode": "id",
+          "cachedResultName": "P02 - HTTP with backoff"
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "52f31f13-9799-576f-a8b3-e6d8b5ca398f",
+      "name": "Fetch source (P02)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1,
+      "position": [
+        1040,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ec11c9d5-a3d7-52e5-91c5-4fedfcabfc53",
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "f514b41c-1f9e-5f55-830f-a3ca5c44407e",
+      "name": "Fetched OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1300,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "errorMessage": "=D04 /products failed after {{ $json.attempts }} attempt(s): {{ $json.response }}"
+      },
+      "id": "7d15f8f8-9593-579a-8de4-44fc01876263",
+      "name": "Source fetch failed",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        1560,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "d2f0157a-a360-5060-8fec-61f1ed9e65e4",
+              "leftValue": "={{ Array.isArray($json.data) && $json.data.length > 0 }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a614aac6-db4e-563e-aa60-0e7e9eb00b5f",
+      "name": "Any rows?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1560,
+        0
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "bc68d35b-12de-5e7e-a225-c1e59aef2f8e",
+      "name": "Nothing fetched",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1820,
+        220
+      ],
+      "notes": "Empty batch: still record last_run_at, cursor unchanged.",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "data",
+        "options": {}
+      },
+      "id": "a5535e50-0f50-525d-a7f6-25b53b8989e3",
+      "name": "Split rows",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        1820,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "8dd3df26-96b9-5828-84fe-6439dc4047cf",
+              "name": "id",
+              "value": "={{ Number($json.id) }}",
+              "type": "number"
+            },
+            {
+              "id": "497ee8de-ed98-5a68-b1f6-592130065b5c",
+              "name": "sku",
+              "value": "={{ String($json.sku || '').trim().toUpperCase() }}",
+              "type": "string"
+            },
+            {
+              "id": "1ad836cc-3476-5d75-b36f-99b0c18ac56e",
+              "name": "name",
+              "value": "={{ String($json.name || '').trim() }}",
+              "type": "string"
+            },
+            {
+              "id": "f3948869-dfca-5110-b390-c3992dd294c7",
+              "name": "price",
+              "value": "={{ Math.round(Number($json.price) * 100) / 100 }}",
+              "type": "number"
+            },
+            {
+              "id": "80626633-3028-5141-9faa-3daffb0426ad",
+              "name": "stock",
+              "value": "={{ Math.max(0, parseInt($json.stock, 10) || 0) }}",
+              "type": "number"
+            },
+            {
+              "id": "d2fa3d1b-edad-502e-8bd9-36bdc47ccabf",
+              "name": "updated_at",
+              "value": "={{ $json.updated_at }}",
+              "type": "string"
+            },
+            {
+              "id": "82c42992-35f6-5c00-bf67-d4b009b7090e",
+              "name": "canonical",
+              "value": "={{ JSON.stringify({ sku: String($json.sku || '').trim().toUpperCase(), name: String($json.name || '').trim(), price: Math.round(Number($json.price) * 100) / 100, stock: Math.max(0, parseInt($json.stock, 10) || 0) }) }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "7e880d76-0ac9-52b9-8c02-650598df9c90",
+      "name": "Canonical row",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2080,
+        0
+      ],
+      "notes": "Business fields only, fixed key order. updated_at is NOT part of the hash.",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "action": "hash",
+        "type": "SHA256",
+        "value": "={{ $json.canonical }}",
+        "dataPropertyName": "content_hash",
+        "encoding": "hex"
+      },
+      "id": "270ab2c8-d47f-591f-9805-91fca6f3ea72",
+      "name": "Hash row (SHA-256)",
+      "type": "n8n-nodes-base.crypto",
+      "typeVersion": 1,
+      "position": [
+        2340,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO products_mirror (id, sku, name, price, stock, content_hash, synced_at)\nVALUES ($1::int, $2, $3, $4::numeric, $5::int, $6, now())\nON CONFLICT (id) DO UPDATE\n   SET sku = EXCLUDED.sku, name = EXCLUDED.name, price = EXCLUDED.price, stock = EXCLUDED.stock,\n       content_hash = EXCLUDED.content_hash, synced_at = now()\n WHERE products_mirror.content_hash IS DISTINCT FROM EXCLUDED.content_hash\nRETURNING id, sku, content_hash, (xmax = 0) AS inserted",
+        "options": {
+          "queryReplacement": "={{ $json.id }}, {{ $json.sku }}, {{ $json.name }}, {{ $json.price }}, {{ $json.stock }}, {{ $json.content_hash }}"
+        }
+      },
+      "id": "123fc3ca-2a07-530b-a8a8-27fd0a4824cf",
+      "name": "Upsert if changed",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2600,
+        0
+      ],
+      "notes": "ON CONFLICT ... WHERE content_hash IS DISTINCT FROM EXCLUDED.content_hash: unchanged rows return no row (skipped). P03 variant: the upsert is the guard.",
+      "notesInFlow": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "ALcredPostgresDm",
+          "name": "Postgres - demo"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "destinationFieldName": "data",
+        "options": {}
+      },
+      "id": "3f13d80c-2808-542b-a38b-e7744e9e4a15",
+      "name": "Collect results",
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        2860,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// One aggregated item in: the RETURNING rows of \"Upsert if changed\" (one per inserted/updated row; skipped rows\n// return nothing). On the empty-batch path the aggregate wraps the P02 result instead - filtered out below.\nconst cfg = $('Config').first().json;\nconst fetched = $('Fetch source (P02)').first().json.data || [];        // every row the API returned this run\nconst results = ($input.first().json.data || []).filter(r => r && r.id !== undefined && r.inserted !== undefined);\nconst inserted = results.filter(r => r.inserted === true).length;\nconst prev = String($('Read watermark').first().json.cursor || cfg.epoch);\nconst newest = fetched.map(r => String(r.updated_at || '')).filter(Boolean).sort().pop() || prev;\nreturn [{ json: {\n  source: cfg.source,\n  previous_cursor: prev,\n  cursor: newest > prev ? newest : prev,       // ISO-8601 Z strings compare lexicographically\n  fetched: fetched.length,\n  inserted,\n  updated: results.length - inserted,\n  skipped: fetched.length - results.length,    // hash equal -> no write\n  changed_ids: results.map(r => r.id),\n  last_run_at: new Date().toISOString(),\n} }];"
+      },
+      "id": "7b968a86-5173-568e-8566-728c328a513b",
+      "name": "Sync summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3120,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "schema": {
+          "__rl": true,
+          "value": "public",
+          "mode": "list"
+        },
+        "table": {
+          "__rl": true,
+          "value": "sync_state",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "source": "={{ $json.source }}",
+            "cursor": "={{ $json.cursor }}",
+            "last_run_at": "={{ $json.last_run_at }}",
+            "rows_seen": "={{ $json.fetched }}"
+          },
+          "matchingColumns": [
+            "source"
+          ],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "7e09614c-ef89-5f7f-8681-4b5fb8157498",
+      "name": "Advance watermark",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        3380,
+        0
+      ],
+      "notes": "Moves only after every changed row was written; re-run after a crash re-reads the same window (idempotent).",
+      "notesInFlow": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "postgres": {
+          "id": "ALcredPostgresDm",
+          "name": "Postgres - demo"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "## D04 - Incremental sync (hash-based change detection)\nWatermark lives in `sync_state` (`mock-api-products`, cursor = max `updated_at` seen). Each run:\n\n1. `GET /products?updated_at_gte=<cursor>` through **P02** (backoff)\n2. canonical JSON of `{sku, name, price, stock}` -> SHA-256 `content_hash`\n3. `INSERT ... ON CONFLICT (id) DO UPDATE ... WHERE content_hash IS DISTINCT FROM EXCLUDED.content_hash` into `products_mirror` - unchanged rows write nothing (**P03**: the upsert *is* the idempotency guard)\n4. summary `{fetched, inserted, updated, skipped}` -> watermark advances **after** the writes\n\nSecond run = no-op (0 inserted, 0 updated). Reset: `test/reset-watermark.sh`.",
+        "height": 270,
+        "width": 700,
+        "color": 4
+      },
+      "id": "4d31ff7b-de82-5489-abf8-1a3bc5cea383",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -40,
+        -360
+      ]
+    }
+  ],
+  "connections": {
+    "Every 15 minutes": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "Read watermark",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read watermark": {
+      "main": [
+        [
+          {
+            "node": "Source request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Source request": {
+      "main": [
+        [
+          {
+            "node": "Fetch source (P02)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch source (P02)": {
+      "main": [
+        [
+          {
+            "node": "Fetched OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run once (manual / CLI)": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetched OK?": {
+      "main": [
+        [
+          {
+            "node": "Any rows?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Source fetch failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Any rows?": {
+      "main": [
+        [
+          {
+            "node": "Split rows",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Nothing fetched",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split rows": {
+      "main": [
+        [
+          {
+            "node": "Canonical row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Canonical row": {
+      "main": [
+        [
+          {
+            "node": "Hash row (SHA-256)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Hash row (SHA-256)": {
+      "main": [
+        [
+          {
+            "node": "Upsert if changed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upsert if changed": {
+      "main": [
+        [
+          {
+            "node": "Collect results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect results": {
+      "main": [
+        [
+          {
+            "node": "Sync summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sync summary": {
+      "main": [
+        [
+          {
+            "node": "Advance watermark",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Nothing fetched": {
+      "main": [
+        [
+          {
+            "node": "Collect results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Africa/Tripoli",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "ALP01ErrorHandle"
+  },
+  "pinData": {},
+  "versionId": "91f46869-3b5f-518a-afbf-7bca83fb72ba",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "description": "Pulls /products since the last watermark, hashes each row, upserts only changed rows into products_mirror and advances the watermark in sync_state."
+  },
+  "id": "ALD04Incremental",
+  "tags": [
+    {
+      "name": "automation-lab"
+    },
+    {
+      "name": "Data & ETL"
+    }
+  ]
+}

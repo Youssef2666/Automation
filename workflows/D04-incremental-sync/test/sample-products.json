@@ -1,0 +1,41 @@
+{
+  "_about": "Two rows of GET http://mock-api:8080/products?updated_at_gte=<cursor>&_sort=updated_at&_order=asc (what Split rows sees), the canonical string Canonical row builds from each, and the SHA-256 Hash row (SHA-256) stores as products_mirror.content_hash.",
+  "source_rows": [
+    {
+      "id": 1,
+      "sku": "SKU-0001",
+      "name": "Classic Desk Lamp",
+      "category": "Office",
+      "price": 413.25,
+      "currency": "USD",
+      "stock": 10,
+      "updated_at": "2026-08-30T00:48:38Z"
+    },
+    {
+      "id": 2,
+      "sku": "SKU-0002",
+      "name": "Eco Monitor Stand",
+      "category": "Office",
+      "price": 94.9,
+      "currency": "USD",
+      "stock": 114,
+      "updated_at": "2026-08-30T02:43:14Z"
+    }
+  ],
+  "canonical": [
+    "{\"sku\":\"SKU-0001\",\"name\":\"Classic Desk Lamp\",\"price\":413.25,\"stock\":10}",
+    "{\"sku\":\"SKU-0002\",\"name\":\"Eco Monitor Stand\",\"price\":94.9,\"stock\":114}"
+  ],
+  "expected": [
+    {
+      "id": 1,
+      "sku": "SKU-0001",
+      "content_hash": "2ace7e25fdee5c68198907b8d8791e6201576f5ddd84f30d9e35c67a9a67d0e3"
+    },
+    {
+      "id": 2,
+      "sku": "SKU-0002",
+      "content_hash": "01743cdf3f040e9c5112eca8785a7b14361aeb27f21df9d34c65353d91966c07"
+    }
+  ]
+}

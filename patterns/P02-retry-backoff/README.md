@@ -100,5 +100,6 @@ public API `GET /api/v1/executions/<id>?includeData=true`) reads:
 
 - `T03 - Polling an API Without Webhooks`
 - `D03 - Multi-source API Aggregation`
+- `D04 - Incremental Sync with Upsert and Dedupe`
 - `M05 - Price / Exchange-rate Watcher`
 - `B01 - Lead Capture, Enrich, CRM Row and Follow-up Sequence`
