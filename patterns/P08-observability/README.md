@@ -135,6 +135,7 @@ filled from the n8n API and charted in Metabase.
 
 - `O05 - Execution Logs to Postgres to Metabase` (logs its own sync runs; backfills everything else)
 - `M04 - DB Threshold Alert` (`info` when all within thresholds, `warning` on a breach, alerted or suppressed)
+- `D05 - Scheduled DB Dump to MinIO with Rotation` (one `success` row per dump; the run notes carry the tables, rows and rotation counts)
 - `P01 - Global Error Handler` (writes the `error` rows to the same table directly, same vocabulary)
 - `T02 - Scheduled Daily Digest` (planned: log `success` / `info` after *Record notification*)
 - `M01 - Uptime Monitor with Escalation` (planned: `warning` on state changes; M01 ships without the call today)

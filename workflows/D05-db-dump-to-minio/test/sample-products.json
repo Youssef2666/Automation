@@ -1,0 +1,51 @@
+{
+  "database": "demo",
+  "schema": "public",
+  "table": "products",
+  "dumped_at": "2026-09-07T09:59:11.049Z",
+  "run_id": "20260907-115909",
+  "row_count": 3,
+  "columns": [
+    "id",
+    "sku",
+    "name",
+    "category",
+    "price",
+    "currency",
+    "stock",
+    "updated_at"
+  ],
+  "rows": [
+    {
+      "id": 1,
+      "sku": "SKU-0001",
+      "name": "Classic Desk Lamp",
+      "category": "Office",
+      "price": 413.25,
+      "currency": "USD",
+      "stock": 10,
+      "updated_at": "2026-08-30T02:48:38+02:00"
+    },
+    {
+      "id": 2,
+      "sku": "SKU-0002",
+      "name": "Eco Monitor Stand",
+      "category": "Office",
+      "price": 94.9,
+      "currency": "USD",
+      "stock": 114,
+      "updated_at": "2026-08-30T04:43:14+02:00"
+    },
+    {
+      "id": 3,
+      "sku": "SKU-0003",
+      "name": "Compact Ergonomic Chair",
+      "category": "Office",
+      "price": 169,
+      "currency": "USD",
+      "stock": 3,
+      "updated_at": "2026-08-25T08:22:10+02:00"
+    }
+  ],
+  "_note": "excerpt: first 3 rows of products.json from a real dump (the full file has 40 rows)"
+}

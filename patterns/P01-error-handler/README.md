@@ -91,6 +91,7 @@ Every workflow in the catalog (`settings.errorWorkflow`). Direct references in f
 - `D02 - Web Scrape to Structured JSON`
 - `D03 - Multi-source API Aggregation`
 - `D04 - Incremental Sync with Upsert and Dedupe`
+- `D05 - Scheduled DB Dump to MinIO with Rotation`
 - `M01 - Uptime Monitor with Escalation`
 - `M02 - GitHub Events to Chat Notification`
 - `M03 - RSS Keyword-filtered Digest`

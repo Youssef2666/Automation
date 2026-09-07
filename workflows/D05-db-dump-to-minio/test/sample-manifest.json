@@ -1,0 +1,143 @@
+{
+  "format": "automation-lab/db-dump-json/v1",
+  "database": "demo",
+  "schema": "public",
+  "server_version": "17.11",
+  "run_id": "20260907-115909",
+  "dumped_at": "2026-09-07T09:59:11.049Z",
+  "file_name": "demo-20260907-115909.zip",
+  "key": "db-dumps/demo-20260907-115909.zip",
+  "bucket": "artifacts",
+  "tables": [
+    {
+      "table": "attendance",
+      "file": "attendance.json",
+      "row_count": 300,
+      "bytes": 43520
+    },
+    {
+      "table": "bookings",
+      "file": "bookings.json",
+      "row_count": 30,
+      "bytes": 7962
+    },
+    {
+      "table": "content_variants",
+      "file": "content_variants.json",
+      "row_count": 0,
+      "bytes": 167
+    },
+    {
+      "table": "customers",
+      "file": "customers.json",
+      "row_count": 117,
+      "bytes": 28611
+    },
+    {
+      "table": "documents",
+      "file": "documents.json",
+      "row_count": 16,
+      "bytes": 10012
+    },
+    {
+      "table": "employees",
+      "file": "employees.json",
+      "row_count": 25,
+      "bytes": 6348
+    },
+    {
+      "table": "execution_log",
+      "file": "execution_log.json",
+      "row_count": 623,
+      "bytes": 207884
+    },
+    {
+      "table": "expenses",
+      "file": "expenses.json",
+      "row_count": 20,
+      "bytes": 4956
+    },
+    {
+      "table": "leads",
+      "file": "leads.json",
+      "row_count": 41,
+      "bytes": 15345
+    },
+    {
+      "table": "notifications",
+      "file": "notifications.json",
+      "row_count": 25,
+      "bytes": 36494
+    },
+    {
+      "table": "order_items",
+      "file": "order_items.json",
+      "row_count": 443,
+      "bytes": 30064
+    },
+    {
+      "table": "orders",
+      "file": "orders.json",
+      "row_count": 200,
+      "bytes": 35697
+    },
+    {
+      "table": "products",
+      "file": "products.json",
+      "row_count": 40,
+      "bytes": 6623
+    },
+    {
+      "table": "products_mirror",
+      "file": "products_mirror.json",
+      "row_count": 40,
+      "bytes": 8574
+    },
+    {
+      "table": "rate_history",
+      "file": "rate_history.json",
+      "row_count": 51,
+      "bytes": 5070
+    },
+    {
+      "table": "sync_state",
+      "file": "sync_state.json",
+      "row_count": 3,
+      "bytes": 525
+    },
+    {
+      "table": "tasks",
+      "file": "tasks.json",
+      "row_count": 0,
+      "bytes": 156
+    },
+    {
+      "table": "tickets",
+      "file": "tickets.json",
+      "row_count": 80,
+      "bytes": 35588
+    },
+    {
+      "table": "uptime_checks",
+      "file": "uptime_checks.json",
+      "row_count": 432,
+      "bytes": 68595
+    },
+    {
+      "table": "uptime_state",
+      "file": "uptime_state.json",
+      "row_count": 4,
+      "bytes": 668
+    },
+    {
+      "table": "webhook_events",
+      "file": "webhook_events.json",
+      "row_count": 302,
+      "bytes": 93410
+    }
+  ],
+  "table_count": 21,
+  "total_rows": 2792,
+  "bytes_uncompressed": 646269,
+  "restore": "unzip, then per table: insert into <table> select * from json_populate_recordset(null::<table>, '<rows json>')"
+}

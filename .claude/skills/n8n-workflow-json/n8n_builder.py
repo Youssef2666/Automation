@@ -721,7 +721,7 @@ def s3_list(wf: Workflow, name: str, bucket: str, prefix: str | None = None) -> 
     params: dict[str, Any] = {"resource": "file", "operation": "getAll", "bucketName": bucket, "returnAll": True,
                               "options": {}}
     if prefix:
-        params["options"]["prefix"] = prefix
+        params["options"]["folderKey"] = prefix   # file:getAll calls the key prefix "folderKey" (S3 node v1)
     return wf.add(name, "n8n-nodes-base.s3", 1, params, cred="s3")
 
 

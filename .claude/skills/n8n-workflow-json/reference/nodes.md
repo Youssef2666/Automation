@@ -95,10 +95,10 @@ Multiple statements in one `executeQuery` are allowed; parameters are `$1..$n`, 
 ```json
 {"resource": "file", "operation": "upload", "bucketName": "backups", "fileName": "demo-2026-09-06.zip",
  "binaryData": true, "binaryPropertyName": "data", "additionalFields": {}, "tagsUi": {}}
-{"resource": "file", "operation": "getAll", "bucketName": "backups", "returnAll": true, "options": {"prefix": "demo-"}}
+{"resource": "file", "operation": "getAll", "bucketName": "backups", "returnAll": true, "options": {"folderKey": "db-dumps/"}}
 {"resource": "file", "operation": "delete", "bucketName": "backups", "fileKey": "={{ $json.Key }}", "options": {}}
 ```
-List output fields: `Key, LastModified, Size, ETag`. Credential `s3`: endpoint `http://minio:9000`, `forcePathStyle: true`.
+List output fields: `Key, LastModified, Size, ETag` (`folderKey` = key prefix; zero-byte objects and `.../` folder markers are filtered out by the node). Credential `s3`: endpoint `http://minio:9000`, `forcePathStyle: true`.
 
 **HTTP Request v4.2** [`http`]
 ```json

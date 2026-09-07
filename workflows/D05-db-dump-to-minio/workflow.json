@@ -1,0 +1,688 @@
+{
+  "name": "D05 - Scheduled DB Dump to MinIO with Rotation",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "daysInterval": 1,
+              "triggerAtHour": 2,
+              "triggerAtMinute": 0
+            }
+          ]
+        }
+      },
+      "id": "af4b9dbe-11de-5bd0-bce3-4d71ef5b98a7",
+      "name": "Daily at 02:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "faf7dd29-f58c-5324-a4e8-db197d1251c9",
+      "name": "Run once (manual / CLI)",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c4775117-3974-58ea-a382-ea7b8031145e",
+              "name": "started_at",
+              "value": "={{ $now.toISO() }}",
+              "type": "string"
+            },
+            {
+              "id": "86b13511-9e2c-5b50-8268-8830b0e6005b",
+              "name": "run_id",
+              "value": "={{ $now.toFormat('yyyyLLdd-HHmmss') }}",
+              "type": "string"
+            },
+            {
+              "id": "50a9a2ed-aa7b-5286-a398-fe11e7604ad0",
+              "name": "schema",
+              "value": "public",
+              "type": "string"
+            },
+            {
+              "id": "6b9042f0-eaa5-5d23-bca4-4fba008408f0",
+              "name": "bucket",
+              "value": "artifacts",
+              "type": "string"
+            },
+            {
+              "id": "8a2aa4b9-76c9-5fd0-8a22-1c5bfa67e97f",
+              "name": "prefix",
+              "value": "db-dumps/",
+              "type": "string"
+            },
+            {
+              "id": "598e305b-4d39-5587-8ff4-77659d3ef542",
+              "name": "keep",
+              "value": 7,
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "67690259-62de-5551-befa-713057837193",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        260,
+        0
+      ],
+      "notes": "keep = how many dumps survive rotation (PRD: 7). prefix must end with '/'.",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select table_name,\n       quote_ident(table_name)                 as ident,\n       current_database()                      as database,\n       current_setting('server_version')       as server_version\n  from information_schema.tables\n where table_schema = $1 and table_type = 'BASE TABLE'\n order by table_name",
+        "options": {
+          "queryReplacement": "={{ $('Config').first().json.schema }}"
+        }
+      },
+      "id": "2fe9afa3-8fef-5529-b967-34996dfa3d4d",
+      "name": "List tables",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        520,
+        0
+      ],
+      "notes": "information_schema.tables: one item per base table (quote_ident form for the FROM clause).",
+      "notesInFlow": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "postgres": {
+          "id": "ALcredPostgresDm",
+          "name": "Postgres - demo"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=select $1::text                                   as table_name,\n       count(*)::int                              as row_count,\n       coalesce(json_agg(row_to_json(t)), '[]'::json) as rows\n  from {{ $json.ident }} t",
+        "options": {
+          "queryReplacement": "={{ $json.table_name }}"
+        }
+      },
+      "id": "265268e8-61af-5056-bafd-e4056b2359b1",
+      "name": "Dump table (json_agg)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        780,
+        0
+      ],
+      "notes": "One SELECT per table; Postgres serialises the rows to JSON (timestamps ISO, numerics as numbers, jsonb nested).",
+      "notesInFlow": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "postgres": {
+          "id": "ALcredPostgresDm",
+          "name": "Postgres - demo"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// One input item per table ({table_name, row_count, rows[]}). Emit ONE item whose binary properties are the\n// per-table JSON files plus manifest.json, so the Compression node can zip them together (comma-separated list).\nconst cfg = $('Config').first().json;\nconst meta = $('List tables').first().json;\nconst dumped_at = new Date().toISOString();\nconst tables = $input.all().map(i => i.json).filter(t => t && t.table_name);\nif (!tables.length) throw new Error('D05: no tables found in schema ' + cfg.schema + ' - nothing to dump');\n\nconst binary = {};\nconst props = [];\nconst manifestTables = [];\nlet total_rows = 0;\nlet bytes_uncompressed = 0;\nfor (const t of tables) {\n  const rows = Array.isArray(t.rows) ? t.rows : [];\n  const columns = rows.length ? Object.keys(rows[0]) : [];\n  const doc = { database: meta.database, schema: cfg.schema, table: t.table_name, dumped_at, run_id: cfg.run_id,\n                row_count: Number(t.row_count) || rows.length, columns, rows };\n  const text = JSON.stringify(doc);\n  const file = `${t.table_name}.json`;\n  const prop = `t_${t.table_name}`;\n  binary[prop] = await this.helpers.prepareBinaryData(Buffer.from(text, 'utf8'), file, 'application/json');\n  props.push(prop);\n  total_rows += doc.row_count;\n  bytes_uncompressed += Buffer.byteLength(text, 'utf8');\n  manifestTables.push({ table: t.table_name, file, row_count: doc.row_count, bytes: Buffer.byteLength(text, 'utf8') });\n}\nconst file_name = `demo-${cfg.run_id}.zip`;\nconst key = `${cfg.prefix}${file_name}`;\nconst manifest = {\n  format: 'automation-lab/db-dump-json/v1',\n  database: meta.database, schema: cfg.schema, server_version: meta.server_version,\n  run_id: cfg.run_id, dumped_at, file_name, key, bucket: cfg.bucket,\n  tables: manifestTables, table_count: tables.length, total_rows, bytes_uncompressed,\n  restore: \"unzip, then per table: insert into <table> select * from json_populate_recordset(null::<table>, '<rows json>')\",\n};\nconst mtext = JSON.stringify(manifest, null, 2);\nbinary.manifest = await this.helpers.prepareBinaryData(Buffer.from(mtext, 'utf8'), 'manifest.json', 'application/json');\nprops.push('manifest');\nbytes_uncompressed += Buffer.byteLength(mtext, 'utf8');\nreturn [{ json: { run_id: cfg.run_id, database: meta.database, server_version: meta.server_version, dumped_at,\n                  file_name, key, bucket: cfg.bucket, table_count: tables.length, total_rows, bytes_uncompressed,\n                  tables: manifestTables, binary_props: props.join(',') },\n          binary }];"
+      },
+      "id": "2e7fb1d6-c941-52c8-be30-f7db2b820c34",
+      "name": "Build dump files",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1040,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "compress",
+        "binaryPropertyName": "={{ $json.binary_props }}",
+        "outputFormat": "zip",
+        "fileName": "={{ $json.file_name }}"
+      },
+      "id": "0c8d4209-3820-589e-83c8-8a7ce86c8ab2",
+      "name": "Zip dump",
+      "type": "n8n-nodes-base.compression",
+      "typeVersion": 1.1,
+      "position": [
+        1300,
+        0
+      ],
+      "notes": "One zip: <table>.json per table + manifest.json (row counts, server version, restore hint).",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "operation": "upload",
+        "bucketName": "artifacts",
+        "fileName": "={{ $('Build dump files').first().json.key }}",
+        "binaryData": true,
+        "binaryPropertyName": "data",
+        "additionalFields": {},
+        "tagsUi": {}
+      },
+      "id": "71901451-a40f-53eb-867d-3065193c7340",
+      "name": "Upload to MinIO (artifacts)",
+      "type": "n8n-nodes-base.s3",
+      "typeVersion": 1,
+      "position": [
+        1560,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "s3": {
+          "id": "ALcredS3MinioLoc",
+          "name": "S3 - MinIO"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "operation": "getAll",
+        "bucketName": "artifacts",
+        "returnAll": true,
+        "options": {
+          "folderKey": "db-dumps/"
+        }
+      },
+      "id": "201a2562-195e-5f66-b3c5-1bd4a476a543",
+      "name": "List dumps (MinIO)",
+      "type": "n8n-nodes-base.s3",
+      "typeVersion": 1,
+      "position": [
+        1820,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "alwaysOutputData": true,
+      "credentials": {
+        "s3": {
+          "id": "ALcredS3MinioLoc",
+          "name": "S3 - MinIO"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Input: every object under the prefix (or one empty item when the bucket has none). Keep the newest `keep`\n// dumps, expire the rest. Only keys that look like our own dumps are touched (regex), and the object uploaded a\n// moment ago must be in the listing - otherwise the upload did not land and this run must fail loudly.\nconst cfg = $('Config').first().json;\nconst built = $('Build dump files').first().json;\nconst keep = Math.max(1, Math.floor(Number(cfg.keep) || 7));\nconst re = new RegExp('^' + cfg.prefix.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&') + 'demo-\\\\d{8}-\\\\d{6}\\\\.zip$');\nconst objects = $input.all().map(i => i.json).filter(o => o && typeof o.Key === 'string' && re.test(o.Key));\nif (!objects.some(o => o.Key === built.key)) {\n  throw new Error(`D05: uploaded dump ${built.key} is not in the s3://${cfg.bucket}/${cfg.prefix} listing`);\n}\n// run_id is yyyyLLdd-HHmmss, so the key sorts chronologically; newest first.\nobjects.sort((a, b) => b.Key.localeCompare(a.Key));\nconst kept = objects.slice(0, keep);\nconst expired = objects.slice(keep).map(o => ({ Key: o.Key, Size: Number(o.Size) || 0, LastModified: o.LastModified }));\nconst current = objects.find(o => o.Key === built.key) || {};\nreturn [{ json: {\n  run_id: cfg.run_id, key: built.key, keep,\n  found: objects.length, kept_count: kept.length, expired_count: expired.length,\n  kept: kept.map(o => o.Key), expired,\n  dump_bytes: Number(current.Size) || 0, dump_etag: current.ETag || null,\n} }];"
+      },
+      "id": "0c363f4f-10cf-577f-b716-52465a29330f",
+      "name": "Plan rotation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2080,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "9fe3f2bf-4f2c-5744-a05b-512884b6b4f9",
+              "leftValue": "={{ $json.expired_count }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "df796243-76c1-560f-abc2-344e8e759560",
+      "name": "Anything to delete?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2340,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "expired",
+        "options": {}
+      },
+      "id": "c800b7f5-a622-5633-b28c-85b4678a874b",
+      "name": "One item per expired dump",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        2600,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "operation": "delete",
+        "bucketName": "artifacts",
+        "fileKey": "={{ $json.Key }}",
+        "options": {}
+      },
+      "id": "fdd201d6-ddf6-5981-99b8-f6da5e7916b4",
+      "name": "Delete expired dump",
+      "type": "n8n-nodes-base.s3",
+      "typeVersion": 1,
+      "position": [
+        2860,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "s3": {
+          "id": "ALcredS3MinioLoc",
+          "name": "S3 - MinIO"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Runs once after the deletes (or straight from the If when there was nothing to delete).\nconst cfg = $('Config').first().json;\nconst built = $('Build dump files').first().json;\nconst plan = $('Plan rotation').first().json;\nconst finished_at = new Date().toISOString();\nconst meta = {\n  run_id: cfg.run_id, database: built.database, server_version: built.server_version,\n  bucket: cfg.bucket, key: built.key, dump_bytes: plan.dump_bytes, bytes_uncompressed: built.bytes_uncompressed,\n  table_count: built.table_count, total_rows: built.total_rows,\n  tables: Object.fromEntries(built.tables.map(t => [t.table, t.row_count])),\n  keep: plan.keep, found: plan.found, kept: plan.kept, deleted: plan.expired.map(e => e.Key),\n  dumped_at: built.dumped_at, finished_at,\n};\nconst notes = `dumped ${built.table_count} tables / ${built.total_rows} rows to s3://${cfg.bucket}/${built.key} ` +\n              `(${plan.dump_bytes} bytes zip); kept ${plan.kept_count}, deleted ${plan.expired_count} older dump(s)`;\nreturn [{ json: { kind: 'db-dump', file_name: built.file_name, storage_key: `s3://${cfg.bucket}/${built.key}`,\n                  meta, notes, table_count: built.table_count, total_rows: built.total_rows,\n                  kept: plan.kept_count, deleted: plan.expired_count } }];"
+      },
+      "id": "452cfce2-9711-5681-b56b-fa1cd95705af",
+      "name": "Summarize run",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3120,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "schema": {
+          "__rl": true,
+          "value": "public",
+          "mode": "list"
+        },
+        "table": {
+          "__rl": true,
+          "value": "documents",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "kind": "={{ $json.kind }}",
+            "file_name": "={{ $json.file_name }}",
+            "storage_key": "={{ $json.storage_key }}",
+            "meta": "={{ JSON.stringify($json.meta) }}"
+          },
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "outputColumns": [
+            "*"
+          ]
+        }
+      },
+      "id": "6ba0013d-864e-5d04-ab60-0ebdf45a028e",
+      "name": "Record dump (documents)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        3380,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "postgres": {
+          "id": "ALcredPostgresDm",
+          "name": "Postgres - demo"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "221e9435-e6f7-5ebe-b61b-5cc2103bb1bb",
+              "name": "execution_id",
+              "value": "={{ $execution.id }}",
+              "type": "string"
+            },
+            {
+              "id": "77583ccf-0f6d-5238-be9b-164b22981696",
+              "name": "workflow_id",
+              "value": "={{ $workflow.id }}",
+              "type": "string"
+            },
+            {
+              "id": "f7a705ef-8b8d-50d4-aa5b-ae83f34e1823",
+              "name": "workflow_name",
+              "value": "={{ $workflow.name }}",
+              "type": "string"
+            },
+            {
+              "id": "c5ee493a-5531-54b6-9f8f-b98586073d78",
+              "name": "status",
+              "value": "success",
+              "type": "string"
+            },
+            {
+              "id": "7e6602d5-c8d3-545f-ae57-821d6814f246",
+              "name": "started_at",
+              "value": "={{ $('Config').first().json.started_at }}",
+              "type": "string"
+            },
+            {
+              "id": "18e817a9-7581-589e-8d9f-20928dd3e395",
+              "name": "notes",
+              "value": "={{ $('Summarize run').first().json.notes }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "345caac9-0f9b-586c-a48f-3cd0a1f76291",
+      "name": "Log input",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        3640,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "ALP08Observabili",
+          "mode": "id",
+          "cachedResultName": "P08 - Log execution"
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "f0bf59e5-f36d-5d0b-a2a1-60d4e968607b",
+      "name": "Log execution (P08)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1,
+      "position": [
+        3900,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## D05 - Scheduled DB dump -> MinIO, keep the newest 7\nNo pg_dump here (Execute Command stays disabled): `information_schema` lists the base tables, one `SELECT count(*), json_agg(row_to_json(t))` per table lets Postgres serialise the rows, a Code node turns them into `<table>.json` + `manifest.json`, Compression zips them, S3 uploads `artifacts/db-dumps/demo-<yyyyLLdd-HHmmss>.zip`.\n\nRotation: list the prefix, sort by key (the run id is a timestamp), keep `Config.keep` (7), delete the rest one S3 delete per key. The fresh upload must appear in the listing or the run fails (**P01**). `documents` row (kind `db-dump`, meta = row counts, kept/deleted keys) and a **P08** `execution_log` row close the run. Restore with psql: `json_populate_recordset(null::<table>, rows)` (test/restore-table.py).",
+        "height": 280,
+        "width": 760,
+        "color": 4
+      },
+      "id": "9217bdff-5864-52d0-8eff-4024b30c5f7a",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -40,
+        -360
+      ]
+    }
+  ],
+  "connections": {
+    "Daily at 02:00": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run once (manual / CLI)": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "List tables",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "List tables": {
+      "main": [
+        [
+          {
+            "node": "Dump table (json_agg)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dump table (json_agg)": {
+      "main": [
+        [
+          {
+            "node": "Build dump files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build dump files": {
+      "main": [
+        [
+          {
+            "node": "Zip dump",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Zip dump": {
+      "main": [
+        [
+          {
+            "node": "Upload to MinIO (artifacts)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload to MinIO (artifacts)": {
+      "main": [
+        [
+          {
+            "node": "List dumps (MinIO)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "List dumps (MinIO)": {
+      "main": [
+        [
+          {
+            "node": "Plan rotation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Plan rotation": {
+      "main": [
+        [
+          {
+            "node": "Anything to delete?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Anything to delete?": {
+      "main": [
+        [
+          {
+            "node": "One item per expired dump",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Summarize run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "One item per expired dump": {
+      "main": [
+        [
+          {
+            "node": "Delete expired dump",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete expired dump": {
+      "main": [
+        [
+          {
+            "node": "Summarize run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Summarize run": {
+      "main": [
+        [
+          {
+            "node": "Record dump (documents)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record dump (documents)": {
+      "main": [
+        [
+          {
+            "node": "Log input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log input": {
+      "main": [
+        [
+          {
+            "node": "Log execution (P08)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Africa/Tripoli",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "ALP01ErrorHandle"
+  },
+  "pinData": {},
+  "versionId": "9198e846-8de2-560e-b75b-bee195285d6c",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "description": "Nightly logical dump of the demo database (JSON per table, zipped) to MinIO artifacts/db-dumps/, keeping the newest 7 dumps; documents row + P08 log per run."
+  },
+  "id": "ALD05DbDumpToMin",
+  "tags": [
+    {
+      "name": "automation-lab"
+    },
+    {
+      "name": "Data & ETL"
+    }
+  ]
+}
