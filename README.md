@@ -219,7 +219,8 @@ Nothing in the repo requires a paid tier, and no workflow is marked `shipped` on
 ```bash
 python scripts/validate.py [folder] [--strict] [--docs]     # folder contract, JSON structure, secret scan, links
 python scripts/build-matrix.py [--check]                    # regenerate (or verify) the matrix above
-python scripts/render-preview.py <folder>                   # draw assets/screenshot.png from workflow.json
+python scripts/render-preview.py <folder>                   # draw assets/screenshot.png from workflow.json (stack down)
+python scripts/dev/canvas-screenshots.py [folder]           # real n8n canvas capture, headless Chromium (stack up)
 bash scripts/import-workflows.sh <folder> [--publish]       # push one folder into the running n8n
 bash scripts/export-workflows.sh [ID ...]                   # pull from n8n, strip credentials, pretty-print
 bash scripts/reseed.sh                                      # drop and reload only the demo database

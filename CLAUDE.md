@@ -42,7 +42,8 @@ docker compose --profile core up -d && bash scripts/setup.sh     # stack + owner
 python scripts/validate.py [folder]                              # contract + secrets (CI gate; Stop hook runs it too)
 python scripts/build-matrix.py                                   # regenerate README matrix
 python .claude/skills/n8n-workflow-json/authoring/<ID>_<slug>.py # regenerate one workflow.json
-python scripts/render-preview.py <folder>                        # preview screenshot
+python scripts/render-preview.py <folder>                        # preview screenshot (stack down)
+python scripts/dev/canvas-screenshots.py [folder]                # real canvas capture, headless (stack up)
 bash scripts/import-workflows.sh <folder> [--publish]            # push to n8n
 bash scripts/export-workflows.sh                                 # pull from n8n (credentials stripped)
 ```

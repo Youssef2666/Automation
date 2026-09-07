@@ -69,7 +69,8 @@ Patterns use `templates/pattern-README.md` (Problem, Pattern, Implementation, Tr
 3. Write the authoring script (`.claude/skills/n8n-workflow-json/authoring/<ID>_<slug>.py`) and run it.
 4. Write `test/` inputs (JSON payloads, CSV rows, SQL, .eml, audio) - synthetic data only, `@lab.local` emails.
 5. Write the README (all sections, concrete commands, no placeholders left).
-6. `python scripts/render-preview.py <folder>` for the screenshot; replace with a real capture when the stack runs.
+6. `python scripts/dev/canvas-screenshots.py <folder>` for a real canvas capture (stack up, headless Chromium via
+   Playwright); `python scripts/render-preview.py <folder>` draws the auto-rendered preview when the stack is down.
 7. `python scripts/validate.py <folder>`; fix everything it reports.
 8. With the stack running: import, execute, verify (see n8n-workflow-json skill section 7). Then set `status: shipped`.
 9. `python scripts/build-matrix.py` and update the pattern READMEs "Used by" lists.
