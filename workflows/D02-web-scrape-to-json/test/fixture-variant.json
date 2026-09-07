@@ -1,0 +1,856 @@
+{
+  "name": "D02 - Web Scrape (fixture test variant)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "daysInterval": 1,
+              "triggerAtHour": 5,
+              "triggerAtMinute": 30
+            }
+          ]
+        }
+      },
+      "id": "51485194-36eb-5a98-8911-943ecebcd3c0",
+      "name": "Daily at 05:30",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "53ea90b9-efc9-50e7-b65c-b53b6199193c",
+      "name": "Run once (manual / CLI)",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "519ee5f3-91eb-53d4-9fb4-b2f6a8398ad1",
+              "name": "catalog_url",
+              "value": "http://mock-api:8080/catalog",
+              "type": "string"
+            },
+            {
+              "id": "c2b6dece-d445-5dc8-8a7b-6c12c42efc66",
+              "name": "max_pages",
+              "value": 20,
+              "type": "number"
+            },
+            {
+              "id": "f4bb57b3-56c4-5e22-966d-9732fcc249d4",
+              "name": "gate_key",
+              "value": "d03-catalog",
+              "type": "string"
+            },
+            {
+              "id": "45ee0311-46dd-557e-a23f-c535273733d9",
+              "name": "gate_limit",
+              "value": 5,
+              "type": "number"
+            },
+            {
+              "id": "b5f57257-ef85-53dc-b159-69b28d27f851",
+              "name": "gate_window_seconds",
+              "value": 10,
+              "type": "number"
+            },
+            {
+              "id": "11097103-a330-518e-b2bc-79c59195f9d2",
+              "name": "bucket",
+              "value": "artifacts",
+              "type": "string"
+            },
+            {
+              "id": "51edb280-38f6-59a2-83a4-0f83ef86cf04",
+              "name": "file_name",
+              "value": "=catalog-scrape-fixture-{{ $now.toFormat('yyyyLLdd') }}.json",
+              "type": "string"
+            },
+            {
+              "id": "18645fd5-8289-5e1f-b0a2-4f5d8acfc4ad",
+              "name": "s3_key",
+              "value": "=scrapes/catalog-scrape-fixture-{{ $now.toFormat('yyyyLLdd') }}.json",
+              "type": "string"
+            },
+            {
+              "id": "b24e7f7b-9cb8-5dba-958b-77853ac78e99",
+              "name": "out_file",
+              "value": "/home/node/.n8n-files/data/out/catalog-scrape-fixture.json",
+              "type": "string"
+            },
+            {
+              "id": "d716127a-fe65-5423-b820-26907945efbb",
+              "name": "rejects_file",
+              "value": "/home/node/.n8n-files/data/out/catalog-scrape-fixture-rejects.json",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "387a1252-8c0c-5740-9a58-6f450955bc8e",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        260,
+        0
+      ],
+      "notes": "Point `catalog_url` at any site whose product cards match the selectors in `Extract cards` / `Extract card fields`; `max_pages` caps a runaway rel=next chain.",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// First turn: the input is the Config item (no page yet). Later turns: the parsed page carrying the rows so far.\nconst prev = $input.first().json;\nconst cfg = $('Config').first().json;\nconst page = prev.page ? Number(prev.page) + 1 : 1;\nreturn [{ json: { page, url: cfg.catalog_url, rows_so_far: prev.rows || [],\n                  key: cfg.gate_key, limit: cfg.gate_limit, window_seconds: cfg.gate_window_seconds } }];"
+      },
+      "id": "11fb90c5-1778-5e54-915e-cc913c4930b5",
+      "name": "Next page",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        520,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const page = Number($json.page || 1);\nconst card = (sku, name, cat, price, cur, stock) => `\n      <article class=\"product\" data-sku=\"${sku}\">\n        <h3 class=\"name\">${name}</h3>\n        <span class=\"category\">${cat}</span>\n        ${price === null ? '' : `<span class=\"price\" data-currency=\"${cur}\">${price}</span>`}\n        <span class=\"stock\">${stock}</span>\n      </article>`;\nconst pages = {\n  1: [card('SKU-9001', 'Fixture Desk Lamp', 'Office', '39.90', 'USD', '12 in stock'),\n      card('SKU-9002', 'Fixture Notebook (no price)', 'Stationery', null, 'USD', '5 in stock'),\n      card('SKU-BAD', 'Fixture Kettle', 'Kitchen', '24.00', 'USD', 'ships soon')],\n  2: [card('SKU-9001', 'Fixture Desk Lamp (duplicate)', 'Office', '39.90', 'USD', '12 in stock'),\n      card('SKU-9003', 'Fixture Camp Stove', 'Outdoor', '58.50', 'USD', 'out of stock')],\n};\nconst cards = pages[page] || [];\nconst next = page < 2 ? `<a rel=\"next\" href=\"/catalog?page=${page + 1}\">Next</a>` : '';\nconst html = `<!doctype html><html><body><main id=\"catalog\" data-page=\"${page}\" data-pages=\"2\">\n  <h1>Fixture catalog</h1>${cards.join('\\n')}\n  <nav class=\"pagination\"><span class=\"page\">Page ${page} of 2</span>${next}</nav>\n</main></body></html>`;\nreturn [{ json: { ok: true, status: 200, attempts: 1, data: html, url: `fixture://catalog?page=${page}` } }];"
+      },
+      "id": "ef55d71f-76fe-58f6-8a3f-ced7193a3eaa",
+      "name": "Fixture page (no network)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        780,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "extractHtmlContent",
+        "sourceData": "json",
+        "dataPropertyName": "data",
+        "extractionValues": {
+          "values": [
+            {
+              "key": "cards",
+              "cssSelector": "article.product",
+              "returnValue": "html",
+              "returnArray": true
+            },
+            {
+              "key": "sku",
+              "cssSelector": "article.product",
+              "returnValue": "attribute",
+              "attribute": "data-sku",
+              "returnArray": true
+            },
+            {
+              "key": "next",
+              "cssSelector": "nav.pagination a[rel=next]",
+              "returnValue": "attribute",
+              "attribute": "href",
+              "returnArray": false
+            },
+            {
+              "key": "page",
+              "cssSelector": "#catalog",
+              "returnValue": "attribute",
+              "attribute": "data-page",
+              "returnArray": false
+            },
+            {
+              "key": "pages",
+              "cssSelector": "#catalog",
+              "returnValue": "attribute",
+              "attribute": "data-pages",
+              "returnArray": false
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "fe9f06f9-803e-5e0e-b9a9-37a99f5def11",
+      "name": "Extract cards",
+      "type": "n8n-nodes-base.html",
+      "typeVersion": 1.2,
+      "position": [
+        1040,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "bc0647d1-cc48-5c6a-97a0-ce8d7c56e2a3",
+              "leftValue": "={{ ($json.cards || []).length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "3f4e475d-4685-58c6-b2ed-8b6e08648119",
+      "name": "Any cards?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1300,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "cards, sku",
+        "options": {}
+      },
+      "id": "706e6c00-a107-5097-8ed4-b653fc979332",
+      "name": "One item per card",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        1560,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "extractHtmlContent",
+        "sourceData": "json",
+        "dataPropertyName": "cards",
+        "extractionValues": {
+          "values": [
+            {
+              "key": "name",
+              "cssSelector": ".name",
+              "returnValue": "text",
+              "returnArray": false
+            },
+            {
+              "key": "category",
+              "cssSelector": ".category",
+              "returnValue": "text",
+              "returnArray": false
+            },
+            {
+              "key": "price",
+              "cssSelector": ".price",
+              "returnValue": "text",
+              "returnArray": false
+            },
+            {
+              "key": "currency",
+              "cssSelector": ".price",
+              "returnValue": "attribute",
+              "attribute": "data-currency",
+              "returnArray": false
+            },
+            {
+              "key": "stock",
+              "cssSelector": ".stock",
+              "returnValue": "text",
+              "returnArray": false
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "90fe53ea-e235-5435-8cd5-52b498ebb5fd",
+      "name": "Extract card fields",
+      "type": "n8n-nodes-base.html",
+      "typeVersion": 1.2,
+      "position": [
+        1820,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// One input item per product card (fields extracted by the second HTML pass). Validate every card on its own,\n// keep the bad ones (with _errors), and decide whether another page follows.\nconst state = $('Next page').last().json;\nconst cfg = $('Config').first().json;\nconst meta = $('Extract cards').first().json;\nconst page = Number(meta.page || state.page);\nconst scraped_at = new Date().toISOString();\nconst source_url = `${state.url}?page=${page}`;\nconst SKU = /^SKU-\\d{4}$/;\nconst CURRENCY = /^[A-Z]{3}$/;\nconst text = (v) => (v === undefined || v === null) ? '' : String(v).replace(/\\s+/g, ' ').trim();\nconst seen = new Set((state.rows_so_far || []).map(r => r.sku));\nconst cardsIn = $('One item per card').all();   // same order as $input (paired items): carries data-sku\nconst rows = $input.all().map((it, i) => {\n  const c = it.json;\n  const errors = [];\n  const sku = text((cardsIn[i] || { json: {} }).json.sku).toUpperCase();\n  const name = text(c.name);\n  const category = text(c.category);\n  const currency = text(c.currency).toUpperCase();\n  const priceText = text(c.price);\n  const price = priceText === '' ? NaN : Number(priceText.replace(/[^0-9.\\-]/g, ''));\n  const stockText = text(c.stock).toLowerCase();\n  const stockMatch = stockText.match(/(\\d+)\\s+in stock/);\n  const stock = stockMatch ? parseInt(stockMatch[1], 10) : (stockText === 'out of stock' ? 0 : null);\n  if (!SKU.test(sku)) errors.push(`sku invalid: \"${sku}\"`);\n  if (!name) errors.push('name missing');\n  if (!category) errors.push('category missing');\n  if (!Number.isFinite(price) || price <= 0) errors.push(`price invalid: \"${priceText}\"`);\n  if (!CURRENCY.test(currency)) errors.push(`currency invalid: \"${currency}\"`);\n  if (stock === null) errors.push(`stock unreadable: \"${stockText}\"`);\n  if (SKU.test(sku)) {\n    if (seen.has(sku)) errors.push('duplicate sku (already scraped on an earlier card or page)');\n    else seen.add(sku);\n  }\n  return { sku, name, category, price: Number.isFinite(price) ? Math.round(price * 100) / 100 : null,\n           currency, stock, in_stock: stock !== null && stock > 0,\n           page, card: i + 1, source_url, scraped_at,\n           _valid: errors.length === 0, _errors: errors.join('; ') };\n});\nconst next = text(meta.next);\nconst pages = Number(meta.pages || 0);\nconst has_next = rows.length > 0 && page < Number(cfg.max_pages || 20)\n              && (next !== '' || (pages > 0 && page < pages));\nreturn [{ json: { page, pages, next, has_next, fetched: rows.length, rows: [...(state.rows_so_far || []), ...rows] } }];"
+      },
+      "id": "aea9c833-343e-544e-b667-17f922fecec6",
+      "name": "Parse and validate page",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2080,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// The page had no product cards: stop paginating and hand the rows collected so far to the same output shape.\nconst state = $('Next page').last().json;\nconst meta = $('Extract cards').first().json;\nreturn [{ json: { page: Number(meta.page || state.page), pages: Number(meta.pages || 0), next: '',\n                  has_next: false, fetched: 0, rows: state.rows_so_far || [] } }];"
+      },
+      "id": "bbe74556-b224-5956-a331-d9230bb53b2d",
+      "name": "Empty page",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "a4c9e056-9742-5eb0-a98b-21eb910c1d16",
+              "leftValue": "={{ $json.has_next }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "dfe10002-d9f0-5668-bc2a-3d929918c471",
+      "name": "More pages?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2340,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// All pages collected: one item per product card, valid or not.\nconst rows = $input.first().json.rows || [];\n// Zero cards is a failure, not an empty dataset: the markup changed or the site is down. Fail loudly so P01 records it.\nif (!rows.length) throw new Error('D02: no product cards matched the selectors (article.product) - markup changed?');\nreturn rows.map(r => ({ json: r }));"
+      },
+      "id": "d6060f55-752f-5a8e-ba2c-36c154c5e023",
+      "name": "Rows",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2600,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "edb53eee-5e5e-5c84-97d6-eec1291ea25a",
+              "leftValue": "={{ $json._valid }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "d3bf2cfc-711c-5204-8892-6e0ce1d2c1ad",
+      "name": "Row valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2860,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Drop the validation bookkeeping; what is left is the published row schema.\nconst { _valid, _errors, ...row } = $input.item.json;\nreturn { json: row };",
+        "mode": "runOnceForEachItem"
+      },
+      "id": "3b2a6c29-557d-55aa-88fc-a13b3055651e",
+      "name": "Clean rows",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3120,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "toJson",
+        "options": {
+          "format": true,
+          "fileName": "={{ $('Config').first().json.file_name }}"
+        }
+      },
+      "id": "cd4a5492-6448-5e5c-9bab-349d73c22e03",
+      "name": "Rows to JSON file",
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        3380,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "={{ $('Config').first().json.out_file }}",
+        "dataPropertyName": "data",
+        "options": {}
+      },
+      "id": "5b4e7c53-f1e4-546c-aad3-5d0a639a9a50",
+      "name": "Write data/out JSON",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        3640,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "operation": "upload",
+        "bucketName": "artifacts",
+        "fileName": "={{ $('Config').first().json.s3_key }}",
+        "binaryData": true,
+        "binaryPropertyName": "data",
+        "additionalFields": {},
+        "tagsUi": {}
+      },
+      "id": "fe7590c2-59b1-5c1a-9e25-c3dc4427f8ed",
+      "name": "Upload to MinIO (artifacts)",
+      "type": "n8n-nodes-base.s3",
+      "typeVersion": 1,
+      "position": [
+        3900,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "s3": {
+          "id": "ALcredS3MinioLoc",
+          "name": "S3 - MinIO"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Runs once after the upload. Counts come from the Rows node (valid and rejected); the reject branch runs after\n// this node (v1 order executes branches depth-first), so it is not referenced here.\nconst cfg = $('Config').first().json;\nconst all = $('Rows').all().map(i => i.json);\nconst rejected = all.filter(r => !r._valid);\nconst last = $('More pages?').last().json;\nreturn [{ json: {\n  source: cfg.catalog_url,\n  pages: Number(last.page || 0),\n  cards: all.length,\n  valid: all.length - rejected.length,\n  rejected: rejected.length,\n  reject_errors: rejected.map(r => `page ${r.page} card ${r.card} (${r.sku || 'no sku'}): ${r._errors}`),\n  file_name: cfg.file_name,\n  storage_key: `s3://${cfg.bucket}/${cfg.s3_key}`,\n  local_file: cfg.out_file,\n  rejects_file: rejected.length ? cfg.rejects_file : null,\n  run_at: new Date().toISOString(),\n} }];"
+      },
+      "id": "ac178701-7937-5977-b621-6c2abeef83f7",
+      "name": "Summarize run",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4160,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "schema": {
+          "__rl": true,
+          "value": "public",
+          "mode": "list"
+        },
+        "table": {
+          "__rl": true,
+          "value": "documents",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "kind": "scrape",
+            "file_name": "={{ $json.file_name }}",
+            "storage_key": "={{ $json.storage_key }}",
+            "meta": "={{ JSON.stringify($json) }}"
+          },
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "outputColumns": [
+            "*"
+          ]
+        }
+      },
+      "id": "4822b2e4-0392-57db-8efd-df9530f07906",
+      "name": "Record dataset (documents)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        4420,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "postgres": {
+          "id": "ALcredPostgresDm",
+          "name": "Postgres - demo"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "toJson",
+        "options": {
+          "format": true,
+          "fileName": "catalog-scrape-fixture-rejects.json"
+        }
+      },
+      "id": "74ec3716-89b1-5ffa-af39-71cb7ea845be",
+      "name": "Rejects to JSON file",
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        3120,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "={{ $('Config').first().json.rejects_file }}",
+        "dataPropertyName": "data",
+        "options": {}
+      },
+      "id": "73deb742-6a30-5e6f-8c51-037cc8c15c50",
+      "name": "Write rejects file",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        3380,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## D02 - Scrape, paginate, validate, publish\n`/catalog?page=N` (14 cards per page, `rel=next` link) fetched one page per turn: **P04** gate (`d03-catalog`, shared with D03 - one budget per site) -> HTTP Request (text, 3 attempts 1 s apart).\n\nTwo HTML passes: page -> one inner-HTML string + `data-sku` per `article.product`, then one item per card -> fields. A card missing a field can never shift its neighbours' values (parallel arrays would).\n\n`Parse and validate page` checks sku / name / category / price / currency / stock and duplicate SKUs across pages; `More pages?` follows `rel=next` (cap `max_pages`). Valid rows -> JSON array file in `data/out/` + MinIO `artifacts/scrapes/` + `documents` row (kind `scrape`, meta = counts); rejected cards -> `data/out/catalog-scrape-rejects.json`. **P01** handles failures.",
+        "height": 330,
+        "width": 720,
+        "color": 4
+      },
+      "id": "d677aa08-fdf2-5d27-b5e8-8a63780482a1",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -40,
+        -420
+      ]
+    }
+  ],
+  "connections": {
+    "Daily at 05:30": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run once (manual / CLI)": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "Next page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Next page": {
+      "main": [
+        [
+          {
+            "node": "Fixture page (no network)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fixture page (no network)": {
+      "main": [
+        [
+          {
+            "node": "Extract cards",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract cards": {
+      "main": [
+        [
+          {
+            "node": "Any cards?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Any cards?": {
+      "main": [
+        [
+          {
+            "node": "One item per card",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Empty page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "One item per card": {
+      "main": [
+        [
+          {
+            "node": "Extract card fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract card fields": {
+      "main": [
+        [
+          {
+            "node": "Parse and validate page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse and validate page": {
+      "main": [
+        [
+          {
+            "node": "More pages?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Empty page": {
+      "main": [
+        [
+          {
+            "node": "More pages?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "More pages?": {
+      "main": [
+        [
+          {
+            "node": "Next page",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rows": {
+      "main": [
+        [
+          {
+            "node": "Row valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Row valid?": {
+      "main": [
+        [
+          {
+            "node": "Clean rows",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Rejects to JSON file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clean rows": {
+      "main": [
+        [
+          {
+            "node": "Rows to JSON file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rows to JSON file": {
+      "main": [
+        [
+          {
+            "node": "Write data/out JSON",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write data/out JSON": {
+      "main": [
+        [
+          {
+            "node": "Upload to MinIO (artifacts)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload to MinIO (artifacts)": {
+      "main": [
+        [
+          {
+            "node": "Summarize run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Summarize run": {
+      "main": [
+        [
+          {
+            "node": "Record dataset (documents)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rejects to JSON file": {
+      "main": [
+        [
+          {
+            "node": "Write rejects file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Africa/Tripoli",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "ALP01ErrorHandle"
+  },
+  "pinData": {},
+  "versionId": "4c878a4b-906a-5761-a6ac-cc6d00024767",
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "id": "ALD02FixtureVari",
+  "tags": [
+    {
+      "name": "automation-lab"
+    },
+    {
+      "name": "test"
+    }
+  ]
+}

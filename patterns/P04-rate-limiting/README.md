@@ -125,6 +125,6 @@ boundary burst produce 429s - the case P02 is there to backstop.
 ## Used by
 
 - `D03 - Multi-source API Aggregation`
-- `D02 - Web Scrape to Structured JSON` (planned)
+- `D02 - Web Scrape to Structured JSON` (shares the `d03-catalog` key with D03: one budget per site)
 - `R02 - Bulk Certificates` (planned: pace docgen renders)
 - `A06 - Article to Social Posts` (planned)

@@ -74,6 +74,8 @@ ok = if_(wf, "Fetched OK?", [cond_bool("={{ $json.ok }}")])
   loop must use `$('Attempt state').last()` (latest run) rather than `.first()` when reading state.
 - `data` carries the parsed body (array or object) - it is returned from a Code node on purpose, a typed Set field
   would reject arrays.
+- Known limit: the HTTP node autodetects the response, so a `text/html` body becomes a file and `data` comes
+  back `null` (found by D02). Scrapers use a direct HTTP Request node until P02 grows a `response_format` input.
 - Not covered: circuit breaking (stop calling a dead service for a while) - see P04 for the rate-limit side.
 
 ## Try it
