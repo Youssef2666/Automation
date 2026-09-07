@@ -1,0 +1,5 @@
+{
+  "_comment": "One item per call. Either key works; external_id wins when both are present. Second object: the same customer by id (case and padding are normalised).",
+  "by_email": { "email": "selin.berg@lab.local" },
+  "by_external_id": { "external_id": " cust-0001 " }
+}

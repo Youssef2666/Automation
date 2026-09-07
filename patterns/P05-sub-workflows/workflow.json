@@ -1,0 +1,227 @@
+{
+  "name": "P05 - Lookup customer",
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "id": "02f7bfe8-c8d9-5335-8206-65f27969b85f",
+      "name": "When called by another workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "0c1bec81-530b-50d1-815f-d5874552235b",
+              "leftValue": "={{ String($json.email ?? '') }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "65b088ef-7614-5482-bb45-8344d873f472",
+              "leftValue": "={{ String($json.external_id ?? '') }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "id": "2587dbcc-f06c-5fac-a5b8-ec91cb0170d7",
+      "name": "Has email or external_id?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        260,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "errorMessage": "P05 lookup customer: input item needs email or external_id"
+      },
+      "id": "d1bc191f-fa88-5a97-8610-78672c3c3e8f",
+      "name": "Missing lookup key",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        520,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// One call = one item: {email?, external_id?}. Both keys are normalised to the form stored in `customers`\n// (e-mail lower-cased, external id upper-cased) or become null, and `lookup_by` records which one wins.\nconst j = $json;\nconst email = j.email === undefined || j.email === null || String(j.email).trim() === ''\n  ? null : String(j.email).trim().toLowerCase();\nconst external_id = j.external_id === undefined || j.external_id === null || String(j.external_id).trim() === ''\n  ? null : String(j.external_id).trim().toUpperCase();\nconst lookup_by = external_id ? 'external_id' : 'email';\nreturn { json: { email, external_id, lookup_by, lookup_value: external_id || email } };",
+        "mode": "runOnceForEachItem"
+      },
+      "id": "745fd8ad-d497-53d3-9535-2d2909ecba38",
+      "name": "Normalize input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        520,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select id, external_id, name, email, phone, company, country, city, segment, created_at\n  from customers\n where ($1::text is not null and external_id = $1)\n    or ($1::text is null and lower(email) = $2)\n order by id\n limit 1",
+        "options": {
+          "queryReplacement": "={{ [ $json.external_id, $json.email ] }}"
+        }
+      },
+      "id": "ff78f6e2-9f14-5ff3-97be-3aa1e9059b55",
+      "name": "Find customer",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        780,
+        0
+      ],
+      "notes": "SELECT is safe to retry. Always output data: a miss is one empty item, so Result still runs.",
+      "notesInFlow": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "ALcredPostgresDm",
+          "name": "Postgres - demo"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// The contract's last node: exactly one flat item, always with `ok` and `response`.\n// \"Always output data\" on the SELECT gives one empty item when no row matched, so this node runs either way.\nconst input = $('Normalize input').first().json;\nconst rows = $input.all().map((i) => i.json).filter((r) => r && r.id !== undefined);\nconst row = rows[0] || null;\nconst found = row !== null;\nconst who = found ? `${row.external_id} ${row.name} (${row.company || 'no company'}, ${row.segment})` : '';\nreturn [{ json: {\n  ok: true,\n  found,\n  customer_id: found ? row.external_id : null,\n  external_id: found ? row.external_id : input.external_id,\n  name: found ? row.name : null,\n  email: found ? row.email : input.email,\n  phone: found ? row.phone : null,\n  company: found ? row.company : null,\n  country: found ? row.country : null,\n  city: found ? row.city : null,\n  segment: found ? row.segment : null,\n  lookup_by: input.lookup_by,\n  lookup_value: input.lookup_value,\n  response: found\n    ? `found ${who} by ${input.lookup_by}`\n    : `no customer with ${input.lookup_by} ${input.lookup_value}`,\n}}];"
+      },
+      "id": "47fa297d-0c9a-55e3-a2a3-44018ed81d98",
+      "name": "Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1040,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## P05 - Lookup customer (sub-workflow contract)\nCall with `{email}` or `{external_id}` -> `{ok, found, customer_id, name, email, company, segment, ..., response}`.\n\nThe contract every shared block follows: **passthrough trigger** -> **validate** (Stop and Error names the block and the field) -> **normalize** -> **one documented job** (`.retry` where safe) -> **Result**: exactly one flat item with `ok` + `response`.\n\nNot found is an answer (`ok: true, found: false`), not an error. Breaking changes get a new folder and id (`P05b-...`), never a silent edit - callers pin `catalog_id(\"P05\")`.",
+        "height": 290,
+        "width": 660,
+        "color": 4
+      },
+      "id": "fcab0dfe-7df0-51c6-a6fc-c08fe7fe4339",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -40,
+        -360
+      ]
+    }
+  ],
+  "connections": {
+    "When called by another workflow": {
+      "main": [
+        [
+          {
+            "node": "Has email or external_id?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has email or external_id?": {
+      "main": [
+        [
+          {
+            "node": "Normalize input",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Missing lookup key",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize input": {
+      "main": [
+        [
+          {
+            "node": "Find customer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find customer": {
+      "main": [
+        [
+          {
+            "node": "Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Africa/Tripoli",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "ALP01ErrorHandle"
+  },
+  "pinData": {},
+  "versionId": "d1434a90-5e45-557c-b766-6cd1bd60477a",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "description": "Reference building block for the sub-workflow contract: {email | external_id} in, one flat {ok, found, ..., response} item out; bad input -> Stop and Error."
+  },
+  "id": "ALP05SubWorkflow",
+  "tags": [
+    {
+      "name": "automation-lab"
+    },
+    {
+      "name": "pattern"
+    },
+    {
+      "name": "P05"
+    }
+  ]
+}

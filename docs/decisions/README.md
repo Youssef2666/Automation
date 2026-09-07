@@ -16,6 +16,7 @@ reverse-engineer from the compose file. One file per decision, 15 lines max, nev
 | [0006](0006-env-access-blocked-in-nodes.md) | Environment access blocked in nodes; config via credentials and Set nodes | accepted |
 | [0007](0007-compose-file-at-repo-root.md) | Compose file at the repo root, image sources under docker/ | accepted |
 | [0008](0008-p07-ships-a-credential-backed-sub-workflow.md) | P07 ships a credential-backed sub-workflow next to the docs; mock-api `/secure/ping` | accepted |
+| [0009](0009-sub-workflow-error-lane-needs-single-item-calls.md) | An Execute Workflow error lane is only trusted on single-item calls | accepted |
 
 ## Template
 

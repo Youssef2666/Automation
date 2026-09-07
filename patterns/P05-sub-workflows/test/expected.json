@@ -1,0 +1,33 @@
+{
+  "_comment": "Exactly one flat item per call, always with ok + response. A miss is ok: true / found: false. Only bad input throws.",
+  "by_email": {
+    "ok": true, "found": true, "customer_id": "CUST-0001", "external_id": "CUST-0001", "name": "Selin Berg",
+    "email": "selin.berg@lab.local", "phone": "+90 53 168 2223", "company": "Ironwood Furniture", "country": "Turkey",
+    "city": "Ankara", "segment": "smb", "lookup_by": "email", "lookup_value": "selin.berg@lab.local",
+    "response": "found CUST-0001 Selin Berg (Ironwood Furniture, smb) by email"
+  },
+  "by_external_id": {
+    "ok": true, "found": true, "customer_id": "CUST-0001", "external_id": "CUST-0001", "name": "Selin Berg",
+    "email": "selin.berg@lab.local", "phone": "+90 53 168 2223", "company": "Ironwood Furniture", "country": "Turkey",
+    "city": "Ankara", "segment": "smb", "lookup_by": "external_id", "lookup_value": "CUST-0001",
+    "response": "found CUST-0001 Selin Berg (Ironwood Furniture, smb) by external_id"
+  },
+  "miss": {
+    "ok": true, "found": false, "customer_id": null, "external_id": null, "name": null, "email": "nobody@lab.local",
+    "phone": null, "company": null, "country": null, "city": null, "segment": null, "lookup_by": "email",
+    "lookup_value": "nobody@lab.local", "response": "no customer with email nobody@lab.local"
+  },
+  "bad_input": "Stop and Error: 'P05 lookup customer: input item needs email or external_id'. With onError=continueErrorOutput on a SINGLE-item call it arrives on the caller's output index 1 as {error}; otherwise the caller fails. Either way P05's errorWorkflow fires and P01 logs the execution.",
+  "postgres_down": "the SELECT retries 3 x 1 s, then the block throws (same two outcomes as bad_input); the contract never returns a half-filled item",
+  "harness_report": {
+    "_comment": "Report node of test/harness.json, observed on n8n 2.37.10 (execution 857): 3 results from the batch 'each' call + 1 error item on output index 1 from the single-item call.",
+    "pass": true,
+    "checks": {
+      "three_results": true, "hit_by_email": true, "hit_by_external_id": true, "miss_is_data": true,
+      "one_error_on_index_1": true, "error_names_the_block": true
+    },
+    "result_items": 3,
+    "error_items": 1,
+    "response": "4 cases passed: 3 results from one 'each' call + 1 error item on output index 1 from the single-item call"
+  }
+}

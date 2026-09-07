@@ -127,3 +127,20 @@ Facts proven against the running stack on 2026-09-06. Add to this file whenever 
   distinguishes inserted from updated rows.
 - Redis `INCR` + `expire` refreshes the TTL on every call (P01 semantics: silent while it keeps happening). For
   "at most once per hour" key the counter on the hour: `m04:alert:<metric>:{{ $now.toFormat('yyyyLLddHH') }}`.
+
+## Learned while shipping P05 (2026-09-07)
+
+- **Execute Workflow v1.1 + `onError: continueErrorOutput` is only reliable with ONE item per call.** Eight probes
+  against `ALP05SubWorkflow`: 1 bad item (`each` or `once`) -> the error item lands on **output index 1**, exactly
+  where the builder wires it; 1 good + 1 bad -> the result arrives, the **failing item vanishes** and the node
+  reports success; 2 bad -> only the first failure arrives; 3 good + 1 bad -> the node ends in error with
+  `TypeError: Cannot read properties of undefined (reading 'entries')` (`WorkflowExecute.assignPairedItems`) and
+  **echoes the raw input items on output 0**. The sub-workflow itself is fine in every case (one integrated
+  execution per item, right result / right Stop and Error). Rule: if you keep the error lane, call one item at a
+  time; if you batch, drop the lane and let a failure fail the run.
+- A sub-workflow's `settings.errorWorkflow` fires even when the caller handles the failure on its error lane: a
+  refused P05 call produced an integrated execution with status `error` **and** a P01 execution in `mode: error`
+  that wrote the `execution_log` row (`error_message`, `error_node`). Blocks that are expected to reject input
+  regularly will page someone; validate in the caller, and keep "not found" as data (`ok: true, found: false`).
+- Manual-trigger-only harnesses cannot be activated (`publish.py` / the UI toggle refuse them: no trigger node).
+  Run them with `scripts/dev/run-workflow.py <id>`; the sub-workflow they call must still be published.

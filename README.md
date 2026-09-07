@@ -69,7 +69,7 @@ current screenshot and passes `scripts/validate.py` (see [CONTRIBUTING.md](CONTR
 
 Generated from each folder's README front-matter. Do not edit between the markers.
 
-<!-- STATS:START -->**21 of 36 workflows shipped · 7 of 8 patterns** (1 building)<!-- STATS:END -->
+<!-- STATS:START -->**21 of 36 workflows shipped · 8 of 8 patterns**<!-- STATS:END -->
 
 <!-- MATRIX:START -->
 ### Triggers (6/7 shipped)
@@ -155,7 +155,7 @@ Each pattern documents a failure story, the rule, its n8n implementation, the tr
 | P02 | [Retry with Exponential Backoff](patterns/P02-retry-backoff/) | [D03](workflows/D03-multi-source-aggregation/), [D04](workflows/D04-incremental-sync/), [M05](workflows/M05-exchange-rate-watcher/), [T03](workflows/T03-api-polling/) | ✅ shipped |
 | P03 | [Idempotency](patterns/P03-idempotency/) | [D04](workflows/D04-incremental-sync/), [M02](workflows/M02-github-events-to-chat/), [T01](workflows/T01-webhook-to-database/) | ✅ shipped |
 | P04 | [Rate Limiting and Batching](patterns/P04-rate-limiting/) | [D02](workflows/D02-web-scrape-to-json/), [D03](workflows/D03-multi-source-aggregation/) | ✅ shipped |
-| P05 | [Sub-workflow modularity](patterns/P05-sub-workflows/) | - | 🚧 building |
+| P05 | [Sub-workflow modularity](patterns/P05-sub-workflows/) | - | ✅ shipped |
 | P06 | [Testing and Mock Payloads](patterns/P06-testing/) | [M02](workflows/M02-github-events-to-chat/), [T05](workflows/T05-form-to-record/) | ✅ shipped |
 | P07 | [Secrets in a Public Repo](patterns/P07-secrets/) | [M02](workflows/M02-github-events-to-chat/), [T01](workflows/T01-webhook-to-database/) | ✅ shipped |
 | P08 | [Observability](patterns/P08-observability/) | [D05](workflows/D05-db-dump-to-minio/), [M01](workflows/M01-uptime-monitor/), [M04](workflows/M04-db-threshold-alert/), [O05](workflows/O05-execution-logs-metabase/) | ✅ shipped |
