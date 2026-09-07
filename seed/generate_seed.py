@@ -19,6 +19,11 @@ Standard library only. Optional extras improve some binary files (each has a pur
   reportlab        invoice-locked.pdf (fallback: minimal hand-built text PDF)
   arabic-reshaper + python-bidi   correct glyph shaping for the Arabic receipt (fallback: unshaped text, noted)
 
+meeting-clip.wav is spoken by a LOCAL, free, offline text-to-speech engine - Windows SAPI (System.Speech),
+espeak-ng, piper (needs PIPER_VOICE) or macOS `say`, first one found wins. Never a cloud TTS, never a key. With
+no engine at all it falls back to synthetic tones that do NOT transcribe, and prints a warning saying so. It is
+therefore the one artifact that is not byte-reproducible across machines: the committed WAV is the record.
+
 Usage:
   python seed/generate_seed.py                 # write everything
   python seed/generate_seed.py --mock-api      # only docker/mock-api/db.json
@@ -36,8 +41,11 @@ import math
 import os
 import random
 import re
+import shutil
 import struct
+import subprocess
 import sys
+import tempfile
 import wave
 import zipfile
 from array import array
@@ -291,6 +299,78 @@ Week four: build the report that proves it worked, and show it to the people who
 
 That is the whole method. It is not glamorous, and it does not require a platform decision. It requires noticing
 where information is copied by hand, and refusing to do that copying more than once.
+"""
+
+# --- meeting-clip.wav: the spoken standup ---------------------------------------------------------
+# THIS is the source of truth for the audio: `seed/files/meeting-clip.wav` is these lines read out loud by a
+# local TTS engine (see write_wav). Invented people, invented company - the same story as the text fixture in
+# workflows/A03-audio-to-tasks/test/meeting-standup.txt, but nothing is imported from there; edit the generator.
+# Every line starts with the speaker's own name because Whisper does not diarise: the spoken label is the only
+# way "I will fix the template" survives transcription as "Samir owns it". Lines are written the way a person
+# says them - "P D Fs" and "V A T" so the engine spells the letters, "finance ops at lab dot local" for
+# finance-ops@lab.local (only @lab.local addresses are ever spoken).
+# Deliberate content, because A03 extracts it: owners (Nadia / Karim / Samir / Leila), action items with spoken
+# due dates ("today", "tomorrow morning", "by Friday", "before the end of the week") and one explicit decision.
+MEETING_TITLE = "Weekly ops standup"
+MEETING_SCRIPT: list[tuple[str, str, str]] = [
+    # (speaker, voice: "f" female / "m" male, line as spoken)
+    ("Nadia", "f", "Nadia. Morning everyone, quick standup. Orders queue first. Karim, where are we?"),
+    ("Karim", "m", "Karim. Twelve orders are still stuck from the partner import. I will chase the corrected file "
+                   "today and re-run the import tomorrow morning."),
+    ("Nadia", "f", "Nadia. Good. Second item, the invoice P D Fs. Support keeps asking about the V A T line."),
+    ("Samir", "m", "Samir. That one is on me. I will fix the template and regenerate this month's invoices by "
+                   "Friday."),
+    ("Nadia", "f", "Nadia. Anything blocked?"),
+    ("Samir", "m", "Samir. Yes. I need the new tax rates from finance first. I mailed finance ops at lab dot local "
+                   "on Wednesday."),
+    ("Nadia", "f", "Nadia. I will escalate the tax rates with finance today. Third item, the uptime alerts. Staging "
+                   "is still paging us."),
+    ("Karim", "m", "Karim. The rule exists, it just never got deployed. Ten minute job."),
+    ("Nadia", "f", "Nadia. Then deploy it before the end of the week, please. Decision: the new partner integration "
+                   "moves to the next sprint."),
+    ("Leila", "f", "Leila. The customer export runs nightly now instead of hourly. No issues since."),
+    ("Nadia", "f", "Nadia. Great, same time next week."),
+]
+WAV_SR = 16000            # what Whisper wants and what A03's HTTP node uploads
+SAPI_RATE = 2             # System.Speech Rate (-10..10); 0 is unusually slow, 2 lands the clip near a minute
+ESPEAK_WPM = 175          # espeak-ng -s (its default is 175)
+SAY_WPM = 190             # macOS `say -r`
+LEAD_SILENCE_S = 0.35     # before the first word
+TAIL_SILENCE_S = 0.60     # after the last word
+GAP_SAME_SPEAKER_S = 0.25
+GAP_NEW_SPEAKER_S = 0.45
+
+# Windows: System.Speech writes straight to a 16 kHz mono WAV. One process renders every line (a PowerShell
+# start-up per line would dominate the runtime); the plan comes in as JSON so no text is ever quoted into a
+# command line. Voices are picked by gender from whatever is installed - nothing is hard-coded to this machine.
+SAPI_PS1 = """param([Parameter(Mandatory=$true)][string]$Plan)
+$ErrorActionPreference = 'Stop'
+Add-Type -AssemblyName System.Speech
+$spec = Get-Content -LiteralPath $Plan -Raw -Encoding UTF8 | ConvertFrom-Json
+$synth = New-Object System.Speech.Synthesis.SpeechSynthesizer
+$voices = @($synth.GetInstalledVoices() | Where-Object { $_.Enabled } | ForEach-Object { $_.VoiceInfo })
+$english = @($voices | Where-Object { $_.Culture.TwoLetterISOLanguageName -eq 'en' })
+if ($english.Count -eq 0) { $english = $voices }
+if ($english.Count -eq 0) { throw 'no SAPI voices are installed' }
+function Pick-Voice([string]$gender) {
+    $match = @($english | Where-Object { $_.Gender -eq $gender })
+    if ($match.Count -gt 0) { return $match[0].Name }
+    return $english[0].Name
+}
+$byGender = @{ 'f' = (Pick-Voice 'Female'); 'm' = (Pick-Voice 'Male') }
+$format = New-Object System.Speech.AudioFormat.SpeechAudioFormatInfo(
+    [int]$spec.sample_rate,
+    [System.Speech.AudioFormat.AudioBitsPerSample]::Sixteen,
+    [System.Speech.AudioFormat.AudioChannel]::Mono)
+foreach ($line in $spec.lines) {
+    $synth.SelectVoice($byGender[[string]$line.voice])
+    $synth.Rate = [int]$spec.rate
+    $synth.SetOutputToWaveFile([string]$line.path, $format)
+    $synth.Speak([string]$line.text)
+}
+$synth.SetOutputToNull()
+$synth.Dispose()
+[Console]::Out.WriteLine('VOICES ' + $byGender['f'] + ' + ' + $byGender['m'])
 """
 
 
@@ -1471,9 +1551,241 @@ def write_receipts(files_dir: Path, opt: Optional) -> str:
     return f"Pillow ({font_name}; Arabic: {ar_name}, {shaped_note})"
 
 
-def write_wav(path: Path) -> str:
-    """~30 s of speech-like synthetic audio (voiced syllables with pitch contour, unvoiced bursts, word and sentence
-    pauses). It is NOT real speech: transcription workflows only need a valid, plausibly-sized 16 kHz mono WAV."""
+# --- meeting-clip.wav ------------------------------------------------------------------------------
+def write_pcm_wav(path: Path, samples: array, sr: int = WAV_SR) -> None:
+    """The only audio format this repo writes: 16-bit mono PCM WAV."""
+    with wave.open(str(path), "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(sr)
+        w.writeframes(samples.tobytes())
+
+
+def pad_silence(samples: array, seconds: float) -> None:
+    samples.frombytes(bytes(2 * int(seconds * WAV_SR)))
+
+
+def read_wav_16k_mono(path: Path) -> array:
+    """Decode whatever PCM WAV an engine produced into 16 kHz mono 16-bit (espeak-ng and piper write 22.05 kHz,
+    SAPI is asked for 16 kHz directly). Linear resampling, stdlib only - `audioop` is gone in Python 3.13."""
+    with wave.open(str(path), "rb") as w:
+        channels, width, rate, frames = w.getnchannels(), w.getsampwidth(), w.getframerate(), w.getnframes()
+        raw = w.readframes(frames)
+    if width == 2:
+        samples = array("h")
+        samples.frombytes(raw)
+        if sys.byteorder == "big":
+            samples.byteswap()
+    elif width == 1:                                     # 8-bit WAV is unsigned
+        samples = array("h", ((b - 128) * 256 for b in raw))
+    elif width == 4:
+        wide = array("i")
+        wide.frombytes(raw)
+        if sys.byteorder == "big":
+            wide.byteswap()
+        samples = array("h", (v >> 16 for v in wide))
+    else:
+        raise ValueError(f"{path.name}: unsupported sample width {width * 8} bit")
+    if channels > 1:
+        samples = array("h", (sum(samples[i:i + channels]) // channels
+                              for i in range(0, len(samples) - channels + 1, channels)))
+    if rate != WAV_SR:
+        step = rate / WAV_SR
+        out = array("h", bytes(2 * int(len(samples) / step)))
+        for i in range(len(out)):
+            x = i * step
+            j = int(x)
+            a = samples[j] if j < len(samples) else 0
+            b = samples[j + 1] if j + 1 < len(samples) else a
+            out[i] = int(a + (b - a) * (x - j))
+        samples = out
+    return samples
+
+
+def trim_silence(samples: array, floor: int = 300, margin_s: float = 0.04) -> array:
+    """Drop the near-silence an engine pads each utterance with, so the pauses in the finished clip are the ones
+    this file chose (and are the same whichever engine rendered it). A margin is kept so plosives survive."""
+    start, end = 0, len(samples)
+    while start < end and abs(samples[start]) < floor:
+        start += 1
+    while end > start and abs(samples[end - 1]) < floor:
+        end -= 1
+    if start >= end:                                     # an all-silent utterance: keep it as it is
+        return samples
+    margin = int(margin_s * WAV_SR)
+    return samples[max(0, start - margin):min(len(samples), end + margin)]
+
+
+def run_tts(cmd: list[str], stdin: bytes | None = None) -> str | None:
+    """Run a TTS binary. Returns its output on success and None on any failure, so the caller tries the next
+    engine instead of crashing the seed generation."""
+    try:
+        proc = subprocess.run(cmd, input=stdin, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=600)
+    except (OSError, subprocess.SubprocessError) as exc:                     # missing, blocked, hung
+        print(f"  tts: {Path(cmd[0]).name} could not run ({exc})", file=sys.stderr)
+        return None
+    out = (proc.stdout or b"").decode("utf-8", "replace").strip()
+    if proc.returncode != 0:
+        print(f"  tts: {Path(cmd[0]).name} exited {proc.returncode}: {out[:300]}", file=sys.stderr)
+        return None
+    return out
+
+
+def line_paths(tmp: Path) -> list[Path]:
+    return [tmp / f"line-{i:02d}.wav" for i in range(len(MEETING_SCRIPT))]
+
+
+def tts_windows_sapi(tmp: Path) -> tuple[list[Path], str] | None:
+    """Windows: System.Speech (SAPI 5). Ships with the OS, offline, no account. One PowerShell process renders
+    every line straight to a 16 kHz mono WAV; the script and the line texts travel as files, never as arguments."""
+    if sys.platform != "win32":
+        return None
+    exe = shutil.which("powershell") or shutil.which("pwsh")
+    if not exe:
+        return None
+    paths = line_paths(tmp)
+    spec = {"sample_rate": WAV_SR, "rate": SAPI_RATE,
+            "lines": [{"voice": voice, "text": text, "path": str(p)}
+                      for (_speaker, voice, text), p in zip(MEETING_SCRIPT, paths)]}
+    plan, script = tmp / "plan.json", tmp / "speak.ps1"
+    plan.write_text(json.dumps(spec, ensure_ascii=False, indent=1), encoding="utf-8")
+    script.write_text(SAPI_PS1, encoding="utf-8")
+    out = run_tts([exe, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+                   "-File", str(script), "-Plan", str(plan)])
+    if out is None or not all(p.exists() for p in paths):
+        return None
+    voices = next((ln[len("VOICES "):] for ln in out.splitlines() if ln.startswith("VOICES ")), "installed voices")
+    return paths, f"Windows SAPI / System.Speech, {voices}, rate {SAPI_RATE:+d}"
+
+
+def tts_espeak_ng(tmp: Path) -> tuple[list[Path], str] | None:
+    """Linux/BSD (and anywhere else it is installed): espeak-ng. `apt install espeak-ng`, free and offline.
+    Robotic but consistently transcribable; +f3/+m3 are its female/male variants of the en-us voice."""
+    exe = shutil.which("espeak-ng") or shutil.which("espeak")
+    if not exe:
+        return None
+    voices = {"f": "en-us+f3", "m": "en-us+m3"}
+    paths = line_paths(tmp)
+    for (_speaker, voice, text), out_path in zip(MEETING_SCRIPT, paths):
+        if run_tts([exe, "-v", voices[voice], "-s", str(ESPEAK_WPM), "-w", str(out_path), "--stdin"],
+                   text.encode("utf-8")) is None:
+            return None
+    if not all(p.exists() for p in paths):
+        return None
+    return paths, f"{Path(exe).name} ({voices['f']} + {voices['m']}, {ESPEAK_WPM} wpm)"
+
+
+def tts_piper(tmp: Path) -> tuple[list[Path], str] | None:
+    """piper: much better sounding, but a voice is a downloaded .onnx file, so it only runs when the model is
+    pointed at explicitly (PIPER_VOICE=/path/to/en_US-....onnx). One model means one voice for every speaker."""
+    exe = shutil.which("piper") or shutil.which("piper-tts")
+    if not exe:
+        return None
+    model = os.environ.get("PIPER_VOICE") or os.environ.get("PIPER_MODEL") or ""
+    if not model or not Path(model).exists():
+        print("  tts: piper is installed but no voice model; set PIPER_VOICE=/path/to/voice.onnx to use it",
+              file=sys.stderr)
+        return None
+    paths = line_paths(tmp)
+    for (_speaker, _voice, text), out_path in zip(MEETING_SCRIPT, paths):
+        if run_tts([exe, "--model", model, "--output_file", str(out_path)], text.encode("utf-8")) is None:
+            return None
+    if not all(p.exists() for p in paths):
+        return None
+    return paths, f"piper ({Path(model).name}, single voice)"
+
+
+def tts_macos_say(tmp: Path) -> tuple[list[Path], str] | None:
+    """macOS: `say` ships with the OS. Text goes in through -f (a file), so nothing is quoted into a shell."""
+    if sys.platform != "darwin":
+        return None
+    exe = shutil.which("say")
+    if not exe:
+        return None
+    listed = run_tts([exe, "-v", "?"]) or ""
+    installed = {ln.split()[0] for ln in listed.splitlines() if ln.strip()}
+    voices = {"f": next((v for v in ("Samantha", "Ava", "Allison") if v in installed), ""),
+              "m": next((v for v in ("Alex", "Tom", "Fred") if v in installed), "")}
+    paths = line_paths(tmp)
+    for i, ((_speaker, voice, text), out_path) in enumerate(zip(MEETING_SCRIPT, paths)):
+        text_file = tmp / f"line-{i:02d}.txt"
+        text_file.write_text(text, encoding="utf-8")
+        cmd = [exe, "-r", str(SAY_WPM), "-o", str(out_path), "--data-format=LEI16@16000",
+               "--file-format=WAVE", "-f", str(text_file)]
+        if voices[voice]:
+            cmd[1:1] = ["-v", voices[voice]]
+        if run_tts(cmd) is None:
+            return None
+    if not all(p.exists() for p in paths):
+        return None
+    picked = " + ".join(v for v in voices.values() if v) or "system default voice"
+    return paths, f"macOS say ({picked}, {SAY_WPM} wpm)"
+
+
+# Tried in order; the first engine that produces audio wins. All of them are local, free and offline.
+TTS_ENGINES: list[tuple[str, Any]] = [
+    ("Windows SAPI", tts_windows_sapi),
+    ("espeak-ng", tts_espeak_ng),
+    ("piper", tts_piper),
+    ("macOS say", tts_macos_say),
+]
+
+NO_TTS_WARNING = """
+  !!  No local text-to-speech engine was found (tried: {tried}).
+  !!  seed/files/meeting-clip.wav has been written with the TONE FALLBACK: it is a valid 16 kHz mono WAV, but it
+  !!  is NOT speech. Whisper hallucinates a different sentence over it every run, so A03 (audio -> tasks) will
+  !!  always take its low-confidence lane instead of demonstrating the transcript -> summary -> task list path.
+  !!  Fix: install a free offline engine and re-run `python seed/generate_seed.py --only files`
+  !!    Linux   sudo apt install espeak-ng        (or dnf/pacman)
+  !!    macOS   `say` ships with the OS - if it is missing, PATH is the problem
+  !!    Windows PowerShell + System.Speech ship with the OS
+  !!    any OS  piper + a voice model, then PIPER_VOICE=/path/to/en_US-voice.onnx
+"""
+
+
+def write_wav(path: Path, opt: Optional) -> str:
+    """seed/files/meeting-clip.wav - MEETING_SCRIPT read out loud by a LOCAL, free, offline TTS engine (never a
+    cloud API and never a key), joined with pauses and written as 16 kHz mono 16-bit PCM, which is what Whisper
+    and A03's upload expect.
+
+    Unlike every other artifact here this one is not byte-deterministic ACROSS MACHINES: the audio depends on the
+    engine and the voices installed (the same engine and voices do reproduce it byte for byte). The committed WAV
+    is therefore the artifact of record, and `--check` validates its container and size, never its bytes. With
+    --no-optional-deps, or on a machine with no engine at all, it falls back to write_tone_wav() and prints
+    NO_TTS_WARNING - a fallback clip does not transcribe."""
+    tried: list[str] = []
+    if opt.enabled:
+        with tempfile.TemporaryDirectory(prefix="seed-tts-") as tmpdir:
+            tmp = Path(tmpdir)
+            for name, engine in TTS_ENGINES:
+                tried.append(name)
+                result = engine(tmp)
+                if result is None:
+                    continue
+                parts, how = result
+                samples = array("h")
+                pad_silence(samples, LEAD_SILENCE_S)
+                previous: str | None = None
+                for (speaker, _voice, _text), part in zip(MEETING_SCRIPT, parts):
+                    if previous is not None:
+                        pad_silence(samples, GAP_SAME_SPEAKER_S if speaker == previous else GAP_NEW_SPEAKER_S)
+                    samples.extend(trim_silence(read_wav_16k_mono(part)))
+                    previous = speaker
+                pad_silence(samples, TAIL_SILENCE_S)
+                write_pcm_wav(path, samples)
+                speakers = len({s for s, _v, _t in MEETING_SCRIPT})
+                return (f"{len(samples) / WAV_SR:.1f} s, 16 kHz mono 16-bit, real speech: {how}; "
+                        f"{len(MEETING_SCRIPT)} lines, {speakers} speakers")
+    reason = "--no-optional-deps" if not opt.enabled else "no TTS engine on this machine"
+    print(NO_TTS_WARNING.format(tried=", ".join(tried) or reason), file=sys.stderr)
+    return write_tone_wav(path) + f"  [TONE FALLBACK ({reason}) - NOT speech, will not transcribe]"
+
+
+def write_tone_wav(path: Path) -> str:
+    """FALLBACK ONLY - ~30 s of speech-like synthetic audio (voiced syllables with pitch contour, unvoiced bursts,
+    word and sentence pauses). It is NOT real speech and does NOT transcribe: Whisper hallucinates a different
+    sentence every run over it, so A03 takes its low-confidence lane. Used only when no local TTS engine is
+    available; see write_wav() for the engines that are tried first."""
     rng = random.Random(SEED + 1)
     sr, total_s = 16000, 30.0
     samples = array("h")
@@ -1529,11 +1841,7 @@ def write_wav(path: Path) -> str:
             silence(rng.uniform(0.07, 0.16))
         silence(rng.uniform(0.35, 0.7))
     silence(max(0.0, total_s - len(samples) / sr))
-    with wave.open(str(path), "wb") as w:
-        w.setnchannels(1)
-        w.setsampwidth(2)
-        w.setframerate(sr)
-        w.writeframes(samples.tobytes())
+    write_pcm_wav(path, samples)
     return f"{len(samples) / sr:.1f} s, 16 kHz mono 16-bit"
 
 
@@ -1657,7 +1965,8 @@ def run_check(root: Path, ds: dict[str, Any]) -> int:
     ev_ids = [e["id"] for e in db["events"]]
     if ev_ids != list(range(1, N_MOCK_EVENTS + 1)):
         problems.append("db.json: events ids are not 1..N incremental")
-    # binary files present and non-trivial
+    # binary files present and non-trivial. NOTE: --check never regenerates binaries, it only inspects the ones
+    # on disk; the text artifacts above are the only ones compared byte for byte.
     for name, min_size in (("orders.xlsx", 2000), ("invoice-locked.pdf", 1500), ("receipt-01.png", 5000),
                            ("receipt-02.png", 5000), ("receipt-ar-01.png", 5000), ("meeting-clip.wav", 900000)):
         p = root / "seed" / "files" / name
@@ -1665,10 +1974,27 @@ def run_check(root: Path, ds: dict[str, Any]) -> int:
             problems.append(f"missing binary: seed/files/{name}")
         elif p.stat().st_size < min_size:
             problems.append(f"seed/files/{name} is suspiciously small ({p.stat().st_size} bytes)")
+    # meeting-clip.wav: check the container A03 and Whisper depend on (16 kHz mono 16-bit, long enough to be a
+    # meeting). Whether it holds real speech or the tone fallback cannot be seen from here - transcribe it.
+    clip, clip_seconds = root / "seed" / "files" / "meeting-clip.wav", 0.0
+    if clip.exists():
+        try:
+            with wave.open(str(clip), "rb") as w:
+                fmt = (w.getnchannels(), w.getsampwidth(), w.getframerate())
+                clip_seconds = w.getnframes() / w.getframerate()
+            if fmt != (1, 2, WAV_SR):
+                problems.append(f"meeting-clip.wav: expected mono / 16-bit / {WAV_SR} Hz, got {fmt}")
+            if clip_seconds < 20:
+                problems.append(f"meeting-clip.wav: only {clip_seconds:.1f} s of audio")
+        except (wave.Error, EOFError) as exc:                # truncated or not a RIFF/WAVE file at all
+            problems.append(f"meeting-clip.wav: not a readable WAV ({exc})")
     if problems:
         for pr in problems:
             print(f"CHECK FAIL  {pr}")
         return 1
+    print(f"note: seed/files/meeting-clip.wav ({clip_seconds:.0f} s, 16 kHz mono 16-bit) is generated by a local TTS "
+          f"engine, so it is engine-dependent and outside the byte-for-byte comparison: --check only validates its "
+          f"container and size, not that it contains speech.")
     print(f"check ok: {len(outputs)} text artifacts match, SQL balanced, "
           f"rows customers={len(ds['customers'])} products={len(ds['products'])} orders={len(ds['orders'])} "
           f"order_items={len(ds['order_items'])} employees={len(ds['employees'])} attendance={len(ds['attendance'])} "
@@ -1719,7 +2045,7 @@ def main(argv: list[str] | None = None) -> int:
                                                    sheets=[("Customers", cust_cols, ds["csv_customers"])])))
         notes.append(("invoice-locked.pdf", write_pdf(files_dir / "invoice-locked.pdf", opt)))
         notes.append(("receipt-*.png", write_receipts(files_dir, opt)))
-        notes.append(("meeting-clip.wav", write_wav(files_dir / "meeting-clip.wav")))
+        notes.append(("meeting-clip.wav", write_wav(files_dir / "meeting-clip.wav", opt)))
         for name in ("orders.xlsx", "invoice-locked.pdf", "receipt-01.png", "receipt-02.png", "receipt-ar-01.png",
                      "meeting-clip.wav"):
             p = files_dir / name

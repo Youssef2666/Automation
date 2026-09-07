@@ -47,9 +47,18 @@ word lists (no real people); Arabic names/departments are generic; money is nume
 | `invoice-locked.pdf` (table of line items, text-based) | R04 table extraction |
 | `receipt-01.png`, `receipt-02.png` (English receipts) | B03 OCR |
 | `receipt-ar-01.png` (Arabic receipt, Amiri font) | A04 Arabic OCR |
-| `meeting-clip.wav` (~30 s synthetic speech, English standup) | A03 transcription |
+| `meeting-clip.wav` (~66 s **real speech**, 16 kHz mono: invented 4-person English ops standup) | A03 transcription |
 | `article.md` (long article) | A06 repurposing |
 | `attendance-week.csv` | R03 report input alternative |
+
+`meeting-clip.wav` is `MEETING_SCRIPT` in `generate_seed.py` (Nadia / Karim / Samir / Leila: stuck orders, the
+invoice VAT line, staging paging - with spoken owners, due dates and one decision, so A03 has something to
+extract) read out loud by the first **local, free, offline** TTS engine found: Windows SAPI, `espeak-ng`, `piper`
+(needs `PIPER_VOICE=...`) or macOS `say`; never a cloud TTS. Output is normalised to 16 kHz mono 16-bit. It is the
+only seed artifact that is **not byte-reproducible across machines** (the same engine and voices do reproduce it
+byte for byte) - `--check` validates its container and size, not its bytes.
+With no engine installed (or `--no-optional-deps`) it falls back to synthetic tones and prints a warning: that
+clip does **not** transcribe (Whisper hallucinates over it) and A03 takes its low-confidence lane.
 
 ## Webhook payloads (`seed/payloads/`)
 

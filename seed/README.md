@@ -2,7 +2,10 @@
 
 Everything in this folder (and `docker/mock-api/db.json`) is produced by **one script**, `generate_seed.py`, with a
 fixed random seed (`20260101`) and a fixed "now" (`2026-09-01T09:00:00Z`). Running it twice gives byte-identical
-output, so the generated files are committed and CI can prove they are in sync with the generator.
+output, so the generated files are committed and CI can prove they are in sync with the generator. The one
+exception is `files/meeting-clip.wav`: it is spoken by whatever local text-to-speech engine the machine has (see
+below), so it reproduces byte for byte on the same machine but not across engines or voices. The committed WAV is
+the artifact of record and `--check` validates its container and size, not its bytes.
 
 **Synthetic only.** Every person, company, e-mail, phone number, invoice and receipt here is invented from word lists.
 E-mails end in `@lab.local`, company domains in `.example.com`, the GitHub payloads use the fake repo
@@ -39,6 +42,23 @@ python -m pip install --user pillow openpyxl reportlab arabic-reshaper python-bi
 Pillow wheels from PyPI ship with libraqm, which shapes Arabic by itself; the generator detects that and does not
 pre-shape (double shaping would mirror the text). The Arabic font is `docker/docgen/fonts/Amiri-Regular.ttf` (OFL).
 
+### Local text-to-speech (for `meeting-clip.wav`)
+
+The meeting recording is `MEETING_SCRIPT` in `generate_seed.py` read out loud. The generator tries these engines in
+order and uses the first one that works - all of them are **local, free and offline; no cloud TTS, no API key**:
+
+| engine | platform | install |
+|---|---|---|
+| Windows SAPI (`System.Speech` via PowerShell) | Windows | ships with the OS |
+| `espeak-ng` | any | `sudo apt install espeak-ng` (or `brew`, `dnf`, `pacman`) |
+| `piper` | any | `pip install piper-tts` **and** `PIPER_VOICE=/path/to/en_US-voice.onnx` (a voice is a downloaded model) |
+| `say` | macOS | ships with the OS |
+
+Whatever the engine produces (22.05 kHz, stereo, 8-bit...) is normalised to **16 kHz mono 16-bit** with stdlib code.
+With **no** engine - or with `--no-optional-deps` - the clip falls back to synthetic tones and the run prints a loud
+warning: that fallback is *not speech*, Whisper hallucinates a different sentence over it every run, and A03 always
+takes its low-confidence lane.
+
 ## What is generated
 
 ### Database (`schema.sql`, `seed.sql`) - Postgres database `demo`
@@ -74,7 +94,7 @@ the inserts so workflows can insert without id collisions.
 | `invoice-locked.pdf` | text-based invoice `INV-2026-0142` with a 6-row line-items table, subtotal, VAT, total ("locked" = the only copy of the data is this PDF) | R04 table extraction |
 | `receipt-01.png`, `receipt-02.png` | English receipts, 720 px wide, black on white (Tesseract-friendly); totals 23.10 LYD and 82.11 EUR | B03 OCR |
 | `receipt-ar-01.png` | Arabic receipt in Amiri, Western digits for amounts; total 28.50 LYD | A04 Arabic OCR |
-| `meeting-clip.wav` | ~30 s, 16 kHz mono 16-bit PCM of **synthetic speech-like audio** (voiced syllables with pitch contour, unvoiced bursts, word/sentence pauses). It is not real speech and has no transcript; it exists so the A03 pipeline has a valid, realistically sized WAV to push through Whisper. Replace with a real recording if you want a meaningful transcript | A03 transcription |
+| `meeting-clip.wav` | ~66 s, 16 kHz mono 16-bit PCM of **real, transcribable speech**: an invented weekly ops standup (Nadia, Karim, Samir, Leila - stuck orders, the invoice VAT line, staging paging), 11 lines, spoken owners and due dates ("today", "tomorrow morning", "by Friday", "before the end of the week") and one decision. The script is `MEETING_SCRIPT` in `generate_seed.py`; the audio is that script read by a local TTS engine (see above), not a recording of anyone | A03 transcription |
 | `article.md` | ~980-word synthetic article, "Automation in small businesses" | A06 repurposing |
 | `attendance-week.csv` | the last 5 working days of the attendance table (125 rows) with employee names and departments | R03 alternative input |
 
