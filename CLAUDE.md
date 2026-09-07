@@ -65,6 +65,7 @@ session banner, and a Stop hook that blocks finishing once while `scripts/valida
 ## Environment notes
 
 - Windows host, Git Bash for `Bash`, Python 3.13 as `python` (not `python3`), Docker Desktop (daemon may be off).
-- The compose file path is set via `COMPOSE_FILE=docker/docker-compose.yml` in `.claude/settings.json`; run compose from the repo root.
+- The compose file is `docker-compose.yml` at the repo root; run compose from there. `docker/` holds only the
+  mock-api and docgen build contexts plus the postgres init scripts.
 - Long files: use the Write tool (shell command length is limited on Windows).
 - Docs/knowledge: n8n docs moved to `https://docs.n8n.io/<section>.md`; `docker compose config -q` works without the daemon.
