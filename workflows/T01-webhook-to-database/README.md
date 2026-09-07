@@ -4,7 +4,7 @@ title: Webhook to Database
 category: Triggers
 difficulty: Beginner
 status: shipped
-patterns: [P01, P03]
+patterns: [P01, P03, P07]
 services: [core]
 tested_on: n8n 2.37.10
 autopublish: true
@@ -14,7 +14,7 @@ depends_on: [P03]
 # T01 - Webhook to Database
 
 **Category:** Triggers · **Difficulty:** Beginner · **Tested on:** n8n 2.37.10
-**Patterns used:** P01 (error handler), P03 (idempotency)
+**Patterns used:** P01 (error handler), P03 (idempotency), P07 (shared key via the header-auth credential)
 
 ## Problem
 

@@ -4,7 +4,7 @@ title: GitHub Events to Chat Notification
 category: Monitoring
 difficulty: Beginner
 status: shipped
-patterns: [P01, P03, P06]
+patterns: [P01, P03, P06, P07]
 services: [core]
 tested_on: n8n 2.37.10
 autopublish: true
@@ -15,7 +15,8 @@ external: GitHub webhook + Telegram bot token (both optional; the core path repl
 # M02 - GitHub Events to Chat Notification
 
 **Category:** Monitoring · **Difficulty:** Beginner · **Tested on:** n8n 2.37.10
-**Patterns used:** P01 (error handler), P03 (idempotency on the delivery id), P06 (signed replay fixtures)
+**Patterns used:** P01 (error handler), P03 (idempotency on the delivery id), P06 (signed replay fixtures),
+P07 (where the shared secret lives - the documented HMAC exception)
 
 ## Problem
 
@@ -41,9 +42,11 @@ signature over the raw body, deduplicates on the delivery id, and routes by even
 
 - Services: `core` profile. Credentials: `SMTP - Mailpit`, `Postgres - demo`, `Redis - local` (via P03).
 - Import: `bash scripts/import-workflows.sh patterns/P03-idempotency workflows/M02-github-events-to-chat --publish`.
-- Secret: the Config node holds the same dummy value as `LAB_WEBHOOK_KEY` in `.env.example`. Workflows cannot
-  read `$env` in this lab (`N8N_BLOCK_ENV_ACCESS_IN_NODE=true`); in production keep the secret in a credential
-  and reference it from the Crypto node (see `docs/security.md`; the P07 secrets pattern is not shipped yet).
+- Secret: the Config node holds the same dummy value as `LAB_WEBHOOK_KEY` in `.env.example`. This is the one
+  exception in P07's decision table: no n8n credential type can feed the Crypto node, and `$env` is blocked
+  (`N8N_BLOCK_ENV_ACCESS_IN_NODE=true`). Rotate it by editing that node (or the authoring script); everything
+  else here (SMTP, Postgres, Redis) reaches the workflow through credentials (see `patterns/P07-secrets/` and
+  `docs/security.md`).
 - Real GitHub (optional): point a repository webhook at a public URL of this endpoint, content type JSON, the
   same secret. Real chat (optional): add a Telegram node (`Telegram - bot`) after the formatters.
 

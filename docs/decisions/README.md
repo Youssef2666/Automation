@@ -15,6 +15,7 @@ reverse-engineer from the compose file. One file per decision, 15 lines max, nev
 | [0005](0005-github-actions-workflows-in-devops-category.md) | O01-O03 are GitHub Actions, documented as doc-only catalog items | accepted |
 | [0006](0006-env-access-blocked-in-nodes.md) | Environment access blocked in nodes; config via credentials and Set nodes | accepted |
 | [0007](0007-compose-file-at-repo-root.md) | Compose file at the repo root, image sources under docker/ | accepted |
+| [0008](0008-p07-ships-a-credential-backed-sub-workflow.md) | P07 ships a credential-backed sub-workflow next to the docs; mock-api `/secure/ping` | accepted |
 
 ## Template
 

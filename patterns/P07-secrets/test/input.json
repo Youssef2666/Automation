@@ -1,0 +1,8 @@
+{
+  "url": "http://mock-api:8080/secure/ping",
+  "method": "POST",
+  "body": {
+    "event": "p07.demo",
+    "note": "the shared key is not in this payload - the credential adds it as a header"
+  }
+}

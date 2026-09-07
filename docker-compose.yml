@@ -192,6 +192,8 @@ services:
     image: automation-lab/mock-api:local
     profiles: ["core"]
     restart: unless-stopped
+    environment:
+      LAB_WEBHOOK_KEY: ${LAB_WEBHOOK_KEY:-lab-demo-key}   # /secure/ping (P07) checks the same key n8n's header credential sends
     ports:
       - "8080:8080"
     healthcheck:

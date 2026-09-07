@@ -1,0 +1,26 @@
+{
+  "_comment": "One flat item per call. `body` is the target's JSON response; `received_at` varies per run.",
+  "post_allowed": {
+    "ok": true, "status": 200, "host": "mock-api:8080", "method": "POST", "url": "http://mock-api:8080/secure/ping",
+    "credential": "Webhook - header auth (ALcredWebhookHdr, header X-Lab-Key)",
+    "body": {"ok": true, "message": "shared key accepted", "method": "POST", "received_at": "<timestamp>",
+             "body": {"event": "p07.demo", "note": "the shared key is not in this payload - the credential adds it as a header"}},
+    "response": "200 from mock-api:8080 - shared key accepted"
+  },
+  "get_allowed": {
+    "_input": {"url": "http://mock-api:8080/secure/ping"},
+    "ok": true, "status": 200, "host": "mock-api:8080", "method": "GET", "url": "http://mock-api:8080/secure/ping",
+    "credential": "Webhook - header auth (ALcredWebhookHdr, header X-Lab-Key)",
+    "body": {"ok": true, "message": "shared key accepted", "method": "GET", "received_at": "<timestamp>"},
+    "response": "200 from mock-api:8080 - shared key accepted"
+  },
+  "refused_host": {
+    "_input": {"url": "http://example.com/collect", "method": "POST", "body": {"event": "p07.demo"}},
+    "error": "Stop and Error: 'P07 signed request: host example.com is not in allowed_hosts - the shared key only travels to hosts named in the \"Allowed hosts\" node' (no request is made; the caller's error lane or P01 sees this message)"
+  },
+  "missing_url": {
+    "_input": {},
+    "error": "Stop and Error: 'P07 signed request: input item needs a url'"
+  },
+  "wrong_key_on_target": "Not reachable from a workflow: the value is fixed by the credential. Reproduce from the host with `curl -i localhost:8080/secure/ping` (401) vs `curl -i -H 'X-Lab-Key: lab-demo-key' localhost:8080/secure/ping` (200)."
+}

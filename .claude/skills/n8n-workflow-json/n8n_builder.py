@@ -621,7 +621,7 @@ def http(wf: Workflow, name: str, url: str, method: str = "GET", *, query: dict[
          headers: dict[str, str] | None = None, json_body: str | dict | None = None,
          form_binary: tuple[str, str] | None = None, full_response: bool = False, never_error: bool = False,
          timeout_ms: int | None = None, response: str = "json", batching: tuple[int, int] | None = None,
-         auth_cred: str | None = None, pagination: dict | None = None) -> Node:
+         auth_cred: str | None = None, pagination: dict | None = None, follow_redirects: bool = True) -> Node:
     params: dict[str, Any] = {"method": method, "url": url, "options": {}}
     if query:
         params["sendQuery"] = True
@@ -656,6 +656,10 @@ def http(wf: Workflow, name: str, url: str, method: str = "GET", *, query: dict[
         params["options"]["batching"] = {"batch": {"batchSize": batching[0], "batchInterval": batching[1]}}
     if pagination:
         params["options"]["pagination"] = {"pagination": pagination}
+    if not follow_redirects:
+        # v4.2 follows 3xx by default and re-sends credentials cross-origin; a credential-carrying call must not.
+        params["options"]["redirect"] = {"redirect": {"followRedirects": False}}
+        params["options"]["sendCredentialsOnCrossOriginRedirect"] = False
     cred = None
     if auth_cred:
         if auth_cred == "header":

@@ -1,0 +1,387 @@
+{
+  "name": "P07 - Signed request (credential-backed)",
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "id": "6ba044f3-b006-525f-8691-e47e0f8bdf90",
+      "name": "When called by another workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "6f185e69-4bf0-5e33-b042-bbcf692db897",
+              "name": "allowed_hosts",
+              "value": "=[\"mock-api:8080\", \"n8n:5678\"]",
+              "type": "array"
+            }
+          ]
+        },
+        "options": {},
+        "includeOtherFields": true
+      },
+      "id": "c8002578-a997-590c-be47-7ac7a894a10e",
+      "name": "Allowed hosts",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        260,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// One item per call: {url, method?, body?}. The secret is NOT here - the HTTP Request node attaches it from the\n// \"Webhook - header auth\" credential. This node only decides whether the target may receive that key at all.\nconst item = $input.first().json;\nconst allowed = (Array.isArray(item.allowed_hosts) ? item.allowed_hosts : []).map((h) => String(h).toLowerCase());\nconst url = String(item.url || '').trim();\nconst method = String(item.method || 'GET').trim().toUpperCase();\nconst body = item.body && typeof item.body === 'object' ? item.body : {};\nlet host = '';\nlet reason = '';\nconst m = url.match(/^(https?):\\/\\/([^/?#]+)/i);\nif (!url) reason = 'input item needs a url';\nelse if (!m) reason = 'url must start with http:// or https:// (got \"' + url.slice(0, 60) + '\")';\nelse {\n  host = m[2].toLowerCase();\n  if (!allowed.includes(host)) {\n    reason = 'host ' + host + ' is not in allowed_hosts - the shared key only travels to hosts named in the \"Allowed hosts\" node';\n  }\n}\nif (!reason && !['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) reason = 'unsupported method ' + method;\nreturn [{ json: { url, method, body, host, allowed: !reason, reason } }];"
+      },
+      "id": "62e6adc7-b2ab-5903-a37e-7c2d5874dae4",
+      "name": "Validate target",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        520,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "22b89339-c806-5f02-881f-ddba8bc2181e",
+              "leftValue": "={{ $json.allowed }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "5d0c34ba-a8c5-5033-a0ab-3dd996c202b7",
+      "name": "Target allowed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        780,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "errorMessage": "=P07 signed request: {{ $json.reason }}"
+      },
+      "id": "32565be7-e011-5126-bddf-129accaee296",
+      "name": "Refuse (key would leak)",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        1040,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "={{ $json.method }}",
+        "url": "={{ $json.url }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          },
+          "timeout": 15000,
+          "redirect": {
+            "redirect": {
+              "followRedirects": false
+            }
+          },
+          "sendCredentialsOnCrossOriginRedirect": false
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth"
+      },
+      "id": "b8b3736f-5128-5dc6-bdaa-a50c41b414e4",
+      "name": "Signed request (header credential)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1040,
+        220
+      ],
+      "onError": "continueErrorOutput",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "ALcredWebhookHdr",
+          "name": "Webhook - header auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "772ac317-66fa-5ae5-8340-3fdfcb8fec78",
+              "name": "ok",
+              "value": "={{ Number($json.statusCode) >= 200 && Number($json.statusCode) < 300 }}",
+              "type": "boolean"
+            },
+            {
+              "id": "59f95c68-d0b3-58e6-acb0-1a4177f3826b",
+              "name": "status",
+              "value": "={{ Number($json.statusCode) }}",
+              "type": "number"
+            },
+            {
+              "id": "85aada48-79c0-5f9d-a297-692ab3ea1254",
+              "name": "host",
+              "value": "={{ $('Validate target').item.json.host }}",
+              "type": "string"
+            },
+            {
+              "id": "51a948c1-b76c-5be4-8971-ebc6a405bb88",
+              "name": "method",
+              "value": "={{ $('Validate target').item.json.method }}",
+              "type": "string"
+            },
+            {
+              "id": "609c3cc3-ca95-5cb8-95bb-af50c2d06a8d",
+              "name": "url",
+              "value": "={{ $('Validate target').item.json.url }}",
+              "type": "string"
+            },
+            {
+              "id": "bc564ac9-0f1b-588e-8b10-f880181cf953",
+              "name": "credential",
+              "value": "Webhook - header auth (ALcredWebhookHdr, header X-Lab-Key)",
+              "type": "string"
+            },
+            {
+              "id": "261f34da-4957-58a6-91b6-0bc6e56fc118",
+              "name": "body",
+              "value": "={{ $json.body !== null && typeof $json.body === 'object' ? $json.body : { raw: String($json.body ?? '') } }}",
+              "type": "object"
+            },
+            {
+              "id": "2335602b-b593-5929-ba39-e5307ef1bda3",
+              "name": "response",
+              "value": "={{ $json.statusCode + ' from ' + $('Validate target').item.json.host + (Number($json.statusCode) >= 200 && Number($json.statusCode) < 300 ? ' - shared key accepted' : ' - target rejected the request') }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "55232f96-30ff-5670-b697-dbbd8c9a46f5",
+      "name": "Result",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1300,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "acd313ae-aae5-5048-b2de-dc143f79b6da",
+              "name": "ok",
+              "value": false,
+              "type": "boolean"
+            },
+            {
+              "id": "de68a29d-f891-503c-9ea4-912a17d831e7",
+              "name": "status",
+              "value": 0,
+              "type": "number"
+            },
+            {
+              "id": "9201e6a6-bc2e-599b-b1c5-f7c04792e36b",
+              "name": "host",
+              "value": "={{ $('Validate target').item.json.host }}",
+              "type": "string"
+            },
+            {
+              "id": "864c8970-d8fe-56aa-a340-42ff9ed65496",
+              "name": "method",
+              "value": "={{ $('Validate target').item.json.method }}",
+              "type": "string"
+            },
+            {
+              "id": "07a44e2c-9b68-54d5-b829-613115b387a8",
+              "name": "url",
+              "value": "={{ $('Validate target').item.json.url }}",
+              "type": "string"
+            },
+            {
+              "id": "b017732b-12db-5dfc-8ba3-bc6f60d5ec71",
+              "name": "credential",
+              "value": "Webhook - header auth (ALcredWebhookHdr, header X-Lab-Key)",
+              "type": "string"
+            },
+            {
+              "id": "075b0330-37c1-5ef3-8bbe-45b459331ddb",
+              "name": "body",
+              "value": "={}",
+              "type": "object"
+            },
+            {
+              "id": "ce487004-482a-5008-bb30-6fde5149a705",
+              "name": "response",
+              "value": "={{ 'connection failed: ' + (typeof $json.error === 'string' ? $json.error : ($json.error && $json.error.message) || 'target unreachable') }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "8a0ed187-7db5-593b-8f6e-b373aaabb7e5",
+      "name": "Result (unreachable)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1300,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## P07 - Signed request (credential-backed secret)\nCall with `{url, method?, body?}`. Returns `{ok, status, host, body, response}`.\n\nThe `X-Lab-Key` value lives **only** in the `Webhook - header auth` credential (created by `scripts/bootstrap.py` from `LAB_WEBHOOK_KEY` in `.env`). This JSON carries `{id, name}` of that credential and nothing else - no `$env`, no key in a Set or Code node.\n\n**Allowed hosts** is the non-secret knob: the key is sent only to hosts listed there; anything else is refused with Stop and Error before any request is made.",
+        "height": 290,
+        "width": 640,
+        "color": 4
+      },
+      "id": "9e1a8af8-bc71-5d86-9d52-9d1fc464d2e9",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -40,
+        -360
+      ]
+    }
+  ],
+  "connections": {
+    "When called by another workflow": {
+      "main": [
+        [
+          {
+            "node": "Allowed hosts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Allowed hosts": {
+      "main": [
+        [
+          {
+            "node": "Validate target",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate target": {
+      "main": [
+        [
+          {
+            "node": "Target allowed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Target allowed?": {
+      "main": [
+        [
+          {
+            "node": "Signed request (header credential)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Refuse (key would leak)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Signed request (header credential)": {
+      "main": [
+        [
+          {
+            "node": "Result",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Result (unreachable)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Africa/Tripoli",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "ALP01ErrorHandle"
+  },
+  "pinData": {},
+  "versionId": "a760293f-cd9b-5c53-a356-7c9d23ecef85",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "description": "Sends {url, method, body} with the shared X-Lab-Key taken from the 'Webhook - header auth' credential; the key never appears in the workflow, only the allowlist of hosts does."
+  },
+  "id": "ALP07Secrets0000",
+  "tags": [
+    {
+      "name": "automation-lab"
+    },
+    {
+      "name": "pattern"
+    },
+    {
+      "name": "P07"
+    }
+  ]
+}

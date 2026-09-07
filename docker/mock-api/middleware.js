@@ -9,9 +9,14 @@
 //   /rates/latest?base=USD         M05 exchange-rate watcher (jittered per minute)
 //   /companies/lookup?domain=...   B01 lead enrichment
 //   /webhooks/sink                 generic notification target that echoes what it received
+//   /secure/ping                   P07 secrets (answers only with the shared X-Lab-Key header; never echoes it)
 'use strict';
 
+const crypto = require('crypto');
+
 const HTML_PAGE_SIZE = 14;
+// Same value the n8n "Webhook - header auth" credential carries (LAB_WEBHOOK_KEY in .env, dummy default).
+const SHARED_KEY = process.env.LAB_WEBHOOK_KEY || 'lab-demo-key';
 const RATE_WINDOW_MS = 10_000;
 const RATE_LIMIT = 5;
 const rateBuckets = new Map(); // ip -> [timestamps]
@@ -157,6 +162,21 @@ ${cards}
       const hit = (db.get('companies').value() || []).find((c) => c.domain === domain);
       if (!hit) return res.status(404).json({ error: 'not found', domain });
       return res.json(hit);
+    }
+
+    if (p === '/secure/ping') {
+      // Constant-time compare, and the key is never written to the response or the logs.
+      const given = Buffer.from(String(req.get('x-lab-key') || ''));
+      const expected = Buffer.from(SHARED_KEY);
+      const valid = given.length === expected.length && crypto.timingSafeEqual(given, expected);
+      if (!valid) return res.status(401).json({ error: 'missing or invalid X-Lab-Key header' });
+      return res.json({
+        ok: true,
+        message: 'shared key accepted',
+        method: req.method,
+        received_at: new Date().toISOString(),
+        body: req.method === 'GET' ? undefined : req.body,
+      });
     }
 
     if (p === '/webhooks/sink') {

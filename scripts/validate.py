@@ -45,7 +45,7 @@ DIFFICULTIES = ("Beginner", "Intermediate", "Advanced")
 SERVICES = ("core", "docs", "ai", "observability")
 REQUIRED_FM = ("id", "title", "category", "difficulty", "status", "patterns", "services")
 LIST_KEYS = ("patterns", "services", "depends_on", "tags")
-DOC_ONLY_IDS = {"P07"}
+DOC_ONLY_IDS: set[str] = set()  # P07 ships a workflow since ADR 0008; doc-only folders declare `doc_only: true` in front-matter
 MIN_SCREENSHOT_WIDTH = 1200
 
 # (label, regex) - label is what the error message shows, regex matched per line, case-insensitive.

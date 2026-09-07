@@ -17,7 +17,8 @@ from n8n_builder import (Workflow, catalog_id, code, cond_bool, crypto_hash, ema
                          postgres_insert, respond, set_fields, switch, webhook)
 
 # The shared secret is the same dummy value as LAB_WEBHOOK_KEY in .env.example. It is NOT read from $env
-# (blocked by N8N_BLOCK_ENV_ACCESS_IN_NODE); production would keep it in a credential (see P07 / docs/security.md).
+# (blocked by N8N_BLOCK_ENV_ACCESS_IN_NODE). No credential type can feed the Crypto node, so this is the one
+# documented exception in P07's decision table (patterns/P07-secrets/README.md, docs/security.md).
 SHARED_SECRET = "lab-demo-key"
 
 VERIFY_JS = r"""

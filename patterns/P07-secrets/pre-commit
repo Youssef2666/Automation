@@ -1,0 +1,28 @@
+#!/usr/bin/env sh
+# P07 - Secrets in a public repo: local pre-commit guard (the CI job in .github/workflows/validate.yml is the
+# blocking one; this catches the same things before they reach a branch).
+#
+# Install once per clone:   cp patterns/P07-secrets/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
+# Skip deliberately:        git commit --no-verify   (CI will still refuse real secrets)
+set -e
+cd "$(git rev-parse --show-toplevel)"
+staged=$(git diff --cached --name-only --diff-filter=ACMR)
+
+# 1. Only .env.example may be committed; every other env file is local state.
+bad_env=$(printf '%s\n' "$staged" | grep -E '(^|/)\.env(\..+)?$' | grep -v '\.env\.example$' || true)
+if [ -n "$bad_env" ]; then
+  echo "pre-commit: refusing env file(s) - only .env.example (dummy values) is tracked:" >&2
+  printf '  %s\n' $bad_env >&2
+  exit 1
+fi
+
+# 2. Runtime data (n8n API key, exports, inbox drops) never leaves the machine.
+bad_data=$(printf '%s\n' "$staged" | grep -E '^data/' | grep -vE '\.gitkeep$' || true)
+if [ -n "$bad_data" ]; then
+  echo "pre-commit: refusing files under data/ (runtime volumes, contains data/.n8n-api-key):" >&2
+  printf '  %s\n' $bad_data >&2
+  exit 1
+fi
+
+# 3. Same regex scan CI runs (API keys, tokens, private-key blocks, JWTs, non-lab emails) on the staged diff.
+git diff --cached | python scripts/validate.py --secrets-stdin
