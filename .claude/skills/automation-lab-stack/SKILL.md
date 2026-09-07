@@ -77,6 +77,9 @@ Hardware baseline: core 2 vCPU / 4 GB / 5 GB disk; ai 4 vCPU / 8 GB / 15 GB (mod
 * `/rates/latest?base=USD` - jittered FX rates (M05); `/health` 200, `/health/down` 503 (M01)
 * `/companies/lookup?domain=acme.example.com` - enrichment (B01)
 * `/webhooks/sink` - accepts POSTs and echoes (for notification targets)
+* writes work: `POST/PUT/PATCH/DELETE` on any collection return 2xx, but they hit a per-container copy of
+  `db.json` (the image seed stays read-only), so `docker compose restart mock-api` resets the dataset - demos
+  stay reproducible and no mutation ever survives a restart
 
 ## docgen endpoints (`docker/docgen/`, FastAPI, profile docs)
 

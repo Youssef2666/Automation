@@ -197,7 +197,9 @@ services:
     ports:
       - "8080:8080"
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health >/dev/null 2>&1 || exit 1"]
+      # 127.0.0.1, not localhost: server.js binds IPv4 only (0.0.0.0) while BusyBox wget in
+      # node:20-alpine resolves localhost to ::1 first and gives up with "Connection refused".
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/health >/dev/null 2>&1 || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 12
