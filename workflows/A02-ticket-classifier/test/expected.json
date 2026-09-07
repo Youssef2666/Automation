@@ -1,0 +1,81 @@
+{
+  "contract": {
+    "description": "What the Structured Output Parser asks the model for, and what Validate classification enforces on top of it. The parser guarantees the shape; the Code node guarantees the values.",
+    "schema_example": {
+      "category": "billing",
+      "priority": "high",
+      "confidence": 0.82,
+      "reason": "Mentions being charged twice for one invoice."
+    },
+    "enforced_values": {
+      "category": [
+        "billing",
+        "technical",
+        "account",
+        "shipping",
+        "other"
+      ],
+      "priority": [
+        "low",
+        "normal",
+        "high",
+        "urgent"
+      ],
+      "confidence": "number in [0, 1]",
+      "reason": "non-empty string, truncated to 240 characters"
+    },
+    "queues": {
+      "billing": "billing@lab.local",
+      "technical": "support-tech@lab.local",
+      "account": "accounts@lab.local",
+      "shipping": "logistics@lab.local",
+      "other": "support@lab.local",
+      "review": "triage@lab.local"
+    }
+  },
+  "fixture": [
+    {
+      "ticket_no": "TCK-9001",
+      "label_in_seed": "billing",
+      "expect_category": "billing",
+      "expect_action": "route",
+      "note": "Duplicate charge on a named invoice: the easy case. Measured: billing / urgent / 0.90 -> billing@lab.local."
+    },
+    {
+      "ticket_no": "TCK-9002",
+      "label_in_seed": "technical",
+      "expect_category": "technical",
+      "expect_action": "route",
+      "note": "HTTP 500 on an endpoint, auth ruled out in the text. Measured: technical / high / 0.80 -> support-tech@lab.local."
+    },
+    {
+      "ticket_no": "TCK-9003",
+      "label_in_seed": "shipping",
+      "expect_category": "shipping",
+      "expect_action": "route or review",
+      "note": "Arabic body and subject. Measured with llama3.2:3b: the category was right (shipping) but the model reported confidence 0.0, so it went to triage@lab.local - a normal outcome for a 3B model, not a bug."
+    },
+    {
+      "ticket_no": "TCK-9004",
+      "label_in_seed": "other",
+      "expect_category": "other",
+      "expect_action": "route or review",
+      "note": "Deliberately vague. Measured: category other, confidence 0.0 -> triage@lab.local. A model that answers 0.9 here would route it to support@lab.local, which is also defensible; the enums, not the confidence, are the real guard rail."
+    }
+  ],
+  "run_summary_shape": {
+    "_comment": "Measured on 2026-09-07 with llama3.2:3b (temperature 0), 76 s for four tickets. Your run may differ; what must not differ is that nothing invalid reaches the tickets table.",
+    "total": 4,
+    "routed": 2,
+    "needs_review": 2,
+    "unparsed": 0,
+    "invalid": 0,
+    "low_confidence": 2,
+    "seed_agreement_pct": 100,
+    "by_category": {
+      "billing": 1,
+      "technical": 1
+    },
+    "notes": "classified 4 ticket(s): 2 routed, 2 to the triage desk; 2 below min_confidence; category matched the seed label on 4/4 (100%)"
+  }
+}

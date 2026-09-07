@@ -1,0 +1,961 @@
+{
+  "name": "A02 - Ticket Classification and Routing",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 1
+            }
+          ]
+        }
+      },
+      "id": "aba8c6e3-5115-5451-8bdc-eb31fd75ff6a",
+      "name": "Every hour",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "51ec68bd-9aee-5157-9d78-5164e6137a7f",
+      "name": "Run once (manual / CLI)",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "cee8bbf3-8152-5784-af21-8bb37477d0a1",
+              "name": "started_at",
+              "value": "={{ $now.toISO() }}",
+              "type": "string"
+            },
+            {
+              "id": "203c64ef-4965-59f9-b602-7f235ec74228",
+              "name": "batch_limit",
+              "value": 4,
+              "type": "number"
+            },
+            {
+              "id": "b648c039-ebaf-5cf2-828c-297476614586",
+              "name": "min_confidence",
+              "value": 0.6,
+              "type": "number"
+            },
+            {
+              "id": "4e91cbb0-1392-559f-960e-4c0f497f1b28",
+              "name": "review_to",
+              "value": "triage@lab.local",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "4c94ddb0-4b4c-5dcc-83d1-effb8d80a107",
+      "name": "Triage settings",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        260,
+        0
+      ],
+      "notes": "How many tickets per run, and how sure the model has to be before the row is written.",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select t.id,\n       t.ticket_no,\n       t.channel,\n       t.subject,\n       t.body,\n       t.category   as seed_category,\n       t.priority   as seed_priority,\n       t.created_at,\n       c.name       as customer_name,\n       c.email      as customer_email\n  from tickets t\n  left join customers c on c.id = t.customer_id\n where t.status = 'open'\n   and t.assigned_to is null\n order by t.created_at asc\n limit $1",
+        "options": {
+          "queryReplacement": "={{ [ $json.batch_limit ] }}"
+        }
+      },
+      "id": "2d2a9841-2860-54b9-aafa-26f34dede961",
+      "name": "Open tickets (oldest first)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        520,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "ALcredPostgresDm",
+          "name": "Postgres - demo"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "4ce8e441-4db0-5a76-8cf1-cc98936bd7aa",
+              "leftValue": "={{ $json.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "0cedf0e5-b249-5848-82d1-e0770b8940ac",
+      "name": "Any open tickets?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        780,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "id": "1b0842bc-980c-57cf-a318-03c68cf1cacc",
+      "name": "Loop over tickets",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        1040,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// One ticket per loop iteration. Build the text the model sees and keep every field the rest of the run needs.\nconst t = $input.first().json;\nconst clean = (s) => String(s ?? '').replace(/\\s+/g, ' ').trim();\nconst subject = clean(t.subject);\nconst body = clean(t.body).slice(0, 1200);\nreturn [{ json: {\n  ticket_id: t.id,\n  ticket_no: t.ticket_no,\n  channel: t.channel,\n  subject,\n  body,\n  seed_category: t.seed_category ?? null,\n  seed_priority: t.seed_priority ?? null,\n  customer_name: t.customer_name ?? null,\n  customer_email: t.customer_email ?? null,\n  created_at: t.created_at ?? null,\n  prompt: [\n    'Ticket: ' + t.ticket_no,\n    'Channel: ' + t.channel,\n    'Subject: ' + (subject || '(no subject)'),\n    'Message: ' + (body || '(empty)'),\n  ].join('\\n'),\n} }];"
+      },
+      "id": "3adbcaa1-2672-55c0-b617-3a5cd80673a0",
+      "name": "Prepare prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1300,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.prompt }}",
+        "hasOutputParser": true,
+        "messages": {
+          "messageValues": [
+            {
+              "message": "You are the triage assistant of a small B2B support desk. You classify exactly one support ticket.\ncategory - choose one: billing | technical | account | shipping | other.\n  billing   invoices, charges, refunds, VAT, billing address, pricing on an existing invoice\n  technical errors, API failures, bugs, failed exports, delayed webhooks, the product not working\n  account   account ownership, adding or removing users, access, data deletion, two-factor codes\n  shipping  deliveries, tracking numbers, damaged or missing parcels, delivery addresses\n  other     anything else: feature requests, bulk pricing questions, partnerships, feedback\npriority - choose one: low | normal | high | urgent, from the business impact stated in the text.\n  urgent    money already lost or a full outage; high  blocked work; normal  the default; low  nice to have\nconfidence - a number between 0 and 1, your own confidence in the category.\nreason - one short English sentence (max 20 words) naming the words that decided it.\nTickets may be written in English or Arabic; classify Arabic tickets the same way and always answer in English. Answer with JSON only: no prose, no markdown, no code fence.\nReturn one JSON object with exactly one key, \"output\", holding the four fields: {\"output\": {\"category\": \"...\", \"priority\": \"...\", \"confidence\": 0.0, \"reason\": \"...\"}}. Nothing outside that object."
+            }
+          ]
+        }
+      },
+      "id": "a9405be9-7bdc-5877-82ac-a4e0fe2dd719",
+      "name": "Classify ticket (LLM)",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.4,
+      "position": [
+        1560,
+        0
+      ],
+      "notes": "One item per call (batch size 1) so the error output is trustworthy; 2 tries = one re-sample.",
+      "notesInFlow": true,
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 2000,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "model": "llama3.2:3b",
+        "options": {
+          "temperature": 0,
+          "format": "json"
+        }
+      },
+      "id": "5bdadfa0-a39f-5590-8489-b835b96978dc",
+      "name": "Ollama chat model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOllama",
+      "typeVersion": 1,
+      "position": [
+        1520,
+        220
+      ],
+      "credentials": {
+        "ollamaApi": {
+          "id": "ALcredOllamaLocl",
+          "name": "Ollama - local"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "schemaType": "fromJson",
+        "jsonSchemaExample": "{\n  \"category\": \"billing\",\n  \"priority\": \"high\",\n  \"confidence\": 0.82,\n  \"reason\": \"Mentions being charged twice for one invoice.\"\n}"
+      },
+      "id": "abf27a1d-34a7-5eb0-8e91-d24aa3a0a6ed",
+      "name": "Classification schema",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [
+        1720,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// The Structured Output Parser guarantees the JSON *shape*; it knows nothing about our enums. Check the values\n// here, before anything touches the database. Invalid values are data, not exceptions: they become problems[].\nconst CATEGORIES = ['billing', 'technical', 'account', 'shipping', 'other'];\nconst PRIORITIES = ['low', 'normal', 'high', 'urgent'];\nconst t = $('Prepare prompt').last().json;\nconst raw = $input.first().json.output ?? $input.first().json ?? {};\nconst norm = (v) => String(v ?? '').trim().toLowerCase();\nconst problems = [];\n\nlet category = norm(raw.category);\nif (!CATEGORIES.includes(category)) {\n  problems.push('category ' + JSON.stringify(raw.category ?? null) + ' is not one of ' + CATEGORIES.join('|'));\n  category = null;\n}\nlet priority = norm(raw.priority);\nif (!PRIORITIES.includes(priority)) {\n  problems.push('priority ' + JSON.stringify(raw.priority ?? null) + ' is not one of ' + PRIORITIES.join('|'));\n  priority = null;\n}\nlet confidence = Number(raw.confidence);\nif (!Number.isFinite(confidence) || confidence < 0 || confidence > 1) {\n  problems.push('confidence ' + JSON.stringify(raw.confidence ?? null) + ' is not a number between 0 and 1');\n  confidence = 0;\n}\nconst reason = String(raw.reason ?? '').trim().slice(0, 240);\nif (!reason) problems.push('reason is empty');\n\nreturn [{ json: { ...t, parsed: true, valid: problems.length === 0, problems,\n                  category, priority, confidence, reason, model_output: raw } }];"
+      },
+      "id": "cb05ef28-38cd-572b-acb6-185b7459a00d",
+      "name": "Validate classification",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1820,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Error output of the chain: the model returned something the parser could not turn into our schema, or Ollama\n// was unreachable. The node already re-sampled once (retryOnFail). Nothing is written to the ticket.\nconst t = $('Prepare prompt').last().json;\nconst e = $input.first().json ?? {};\nconst err = e.error ?? e;\nconst message = String(err?.message ?? err?.description ?? err ?? 'unknown error').replace(/\\s+/g, ' ').slice(0, 300);\nreturn [{ json: { ...t, parsed: false, valid: false, problems: ['model output unusable: ' + message],\n                  category: null, priority: null, confidence: 0, reason: '', model_output: null } }];"
+      },
+      "id": "4591a1f7-fb4a-57ac-bf38-45a007cc9e1d",
+      "name": "Model output unusable",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1860,
+        460
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// One place decides what happens to this ticket, so the e-mail, the notification row and the summary agree.\nconst QUEUES = {\n  billing: 'billing@lab.local',\n  technical: 'support-tech@lab.local',\n  account: 'accounts@lab.local',\n  shipping: 'logistics@lab.local',\n  other: 'support@lab.local',\n};\nconst cfg = $('Triage settings').first().json;\nconst c = $input.first().json;\nconst minConfidence = Number(cfg.min_confidence);\nconst confidence = Number(c.confidence) || 0;\nconst auto_route = Boolean(c.valid) && confidence >= minConfidence;\nconst route_to = auto_route ? QUEUES[c.category] : cfg.review_to;\nconst problems = Array.isArray(c.problems) ? c.problems : [];\nconst review_reason = auto_route\n  ? ''\n  : (problems.length ? problems.join('; ')\n                     : 'confidence ' + confidence.toFixed(2) + ' below min_confidence ' + minConfidence.toFixed(2));\nconst agreed_with_seed = Boolean(c.seed_category) && c.category === c.seed_category;\n\nconst esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst row = (k, v) => '<tr><td style=\"padding:4px 10px;border-bottom:1px solid #eee;color:#666\">' + esc(k) +\n  '</td><td style=\"padding:4px 10px;border-bottom:1px solid #eee\">' + esc(v) + '</td></tr>';\nconst subject = auto_route\n  ? '[Automation Lab] ' + c.ticket_no + ' -> ' + c.category + ' queue (' + c.priority + ')'\n  : '[Automation Lab] ' + c.ticket_no + ' needs manual triage';\nconst html = '<div style=\"font-family:sans-serif;max-width:720px\">' +\n  '<h2>' + esc(auto_route ? 'Ticket routed: ' + c.ticket_no : 'Ticket needs a human: ' + c.ticket_no) + '</h2>' +\n  '<table style=\"border-collapse:collapse;font-size:14px\">' +\n  row('Subject', c.subject || '(no subject)') +\n  row('Channel', c.channel) +\n  row('Customer', [c.customer_name, c.customer_email].filter(Boolean).join(' - ') || 'unknown') +\n  row('Model category', c.category ?? '(rejected)') +\n  row('Model priority', c.priority ?? '(rejected)') +\n  row('Confidence', confidence.toFixed(2) + ' (min ' + minConfidence.toFixed(2) + ')') +\n  row('Model reason', c.reason || '(none)') +\n  row('Label in the seed data', c.seed_category\n    ? c.seed_category + (c.category ? (agreed_with_seed ? ' (agrees)' : ' (differs)') : '')\n    : 'none') +\n  (auto_route ? '' : row('Why a human', review_reason)) +\n  '</table>' +\n  '<p style=\"font-size:14px;white-space:pre-wrap;background:#fafafa;padding:10px;border-left:3px solid #ddd\">' +\n  esc(c.body || '(empty body)') + '</p>' +\n  '<p style=\"color:#888;font-size:12px\">' +\n  (auto_route\n    ? 'The ticket was set to status <b>triaged</b> and assigned to this queue by A02 - Ticket Classifier.'\n    : 'The ticket row was <b>not</b> modified: A02 never writes a classification it cannot validate.') +\n  ' Classified by a local Ollama model; treat the category as a suggestion.</p></div>';\nconst text = [\n  (auto_route ? 'Routed ' : 'Needs manual triage: ') + c.ticket_no + ' (' + c.channel + ')',\n  'Subject: ' + (c.subject || '(no subject)'),\n  'Category: ' + (c.category ?? '(rejected)') + ' / priority: ' + (c.priority ?? '(rejected)') +\n    ' / confidence: ' + confidence.toFixed(2),\n  'Reason: ' + (c.reason || '(none)'),\n  auto_route ? 'Assigned to: ' + route_to : 'Why a human: ' + review_reason,\n].join('\\n');\n\nreturn [{ json: {\n  ticket_id: c.ticket_id, ticket_no: c.ticket_no, subject: c.subject, channel: c.channel,\n  seed_category: c.seed_category, agreed_with_seed,\n  parsed: Boolean(c.parsed), valid: Boolean(c.valid), problems, review_reason,\n  category: c.category, priority: c.priority, confidence, reason: c.reason,\n  action: auto_route ? 'route' : 'review', auto_route, route_to,\n  severity: auto_route ? 'info' : 'warning',\n  subject_line: subject, html, text,\n} }];"
+      },
+      "id": "480b0117-1601-5ca3-9182-2efe6c4a60a4",
+      "name": "Decide routing",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2080,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "d496094f-8ad9-5658-bc7a-82aabec28cda",
+              "leftValue": "={{ $json.auto_route }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a496d3c0-23b5-5a98-b867-307b71e244ff",
+      "name": "Valid and confident?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2340,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "update tickets\n   set category    = $2,\n       priority    = $3,\n       status      = 'triaged',\n       assigned_to = $4\n where id = $1\n   and status = 'open'\nreturning id, ticket_no, category, priority, status, assigned_to",
+        "options": {
+          "queryReplacement": "={{ [ $json.ticket_id, $json.category, $json.priority, $json.route_to ] }}"
+        }
+      },
+      "id": "acc2c1af-acfc-5857-9e72-2e0c15e515c3",
+      "name": "Triage ticket (Postgres)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2600,
+        0
+      ],
+      "notes": "Only reached by a validated classification; `and status = 'open'` keeps a re-run a no-op.",
+      "notesInFlow": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "ALcredPostgresDm",
+          "name": "Postgres - demo"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fromEmail": "automation-lab@lab.local",
+        "toEmail": "={{ $('Decide routing').last().json.route_to }}",
+        "subject": "={{ $('Decide routing').last().json.subject_line }}",
+        "options": {},
+        "emailFormat": "html",
+        "html": "={{ $('Decide routing').last().json.html }}"
+      },
+      "id": "d1a3581d-7d60-5a4f-b6ba-24f7c021f74a",
+      "name": "Notify the queue (Mailpit)",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        2860,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "smtp": {
+          "id": "ALcredSmtpMailpt",
+          "name": "SMTP - Mailpit"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "schema": {
+          "__rl": true,
+          "value": "public",
+          "mode": "list"
+        },
+        "table": {
+          "__rl": true,
+          "value": "notifications",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "channel": "email",
+            "target": "={{ $('Decide routing').last().json.route_to }}",
+            "subject": "={{ $('Decide routing').last().json.subject_line }}",
+            "body": "={{ $('Decide routing').last().json.text }}",
+            "severity": "={{ $('Decide routing').last().json.severity }}",
+            "sent_at": "={{ $now.toISO() }}"
+          },
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "3ae248fa-1b68-5bad-80a7-b931661eca48",
+      "name": "Record notification",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        3120,
+        0
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "postgres": {
+          "id": "ALcredPostgresDm",
+          "name": "Postgres - demo"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a537d195-aff3-5c5d-b3e4-6c119d41c182",
+              "name": "ticket_id",
+              "value": "={{ $('Decide routing').last().json.ticket_id }}",
+              "type": "number"
+            },
+            {
+              "id": "38e344b4-c358-560f-a592-c87b81edf945",
+              "name": "ticket_no",
+              "value": "={{ $('Decide routing').last().json.ticket_no }}",
+              "type": "string"
+            },
+            {
+              "id": "0ff5a61b-06a7-5b70-bb25-17c650407a76",
+              "name": "action",
+              "value": "={{ $('Decide routing').last().json.action }}",
+              "type": "string"
+            },
+            {
+              "id": "9be8027b-c4c0-5282-a375-a3f77d1b3093",
+              "name": "category",
+              "value": "={{ $('Decide routing').last().json.category || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "b9edb2a7-b218-5962-bbf0-304b634d8619",
+              "name": "priority",
+              "value": "={{ $('Decide routing').last().json.priority || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "449fd643-f0c9-5e31-ae65-ce7076e68639",
+              "name": "confidence",
+              "value": "={{ $('Decide routing').last().json.confidence }}",
+              "type": "number"
+            },
+            {
+              "id": "c037bc93-f763-5cd4-84a2-d5d1edc06a0d",
+              "name": "route_to",
+              "value": "={{ $('Decide routing').last().json.route_to }}",
+              "type": "string"
+            },
+            {
+              "id": "89be3793-23ab-5bba-896d-3029923bd3a0",
+              "name": "parsed",
+              "value": "={{ $('Decide routing').last().json.parsed }}",
+              "type": "boolean"
+            },
+            {
+              "id": "5bdf9a07-ef5d-5c02-a249-0821daadf24f",
+              "name": "valid",
+              "value": "={{ $('Decide routing').last().json.valid }}",
+              "type": "boolean"
+            },
+            {
+              "id": "fcdbf903-cdf9-57f1-8c35-6071ed364a41",
+              "name": "seed_category",
+              "value": "={{ $('Decide routing').last().json.seed_category || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "75c7bb4b-1ba0-57df-b70d-a23168567e53",
+              "name": "agreed_with_seed",
+              "value": "={{ $('Decide routing').last().json.agreed_with_seed }}",
+              "type": "boolean"
+            },
+            {
+              "id": "a858f7af-0829-506d-881c-1dc41a66c620",
+              "name": "reason",
+              "value": "={{ $('Decide routing').last().json.reason || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "0ced0521-cf31-510e-8304-ced4b89a2086",
+              "name": "problems",
+              "value": "={{ $('Decide routing').last().json.problems.join('; ') }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "35311e1d-d1c0-57e5-9b2b-10575e953761",
+      "name": "Outcome",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        3380,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// The loop's done branch carries one Outcome item per ticket (both lanes feed it back).\nconst rows = $input.all().map(i => i.json).filter(r => r && r.ticket_no);\nconst routed = rows.filter(r => r.action === 'route');\nconst review = rows.filter(r => r.action === 'review');\nconst unparsed = rows.filter(r => r.parsed === false);\nconst invalid = rows.filter(r => r.parsed === true && r.valid === false);\nconst lowConf = review.filter(r => r.parsed === true && r.valid === true);\n// Agreement is only meaningful for tickets the model actually classified (the seed category is the label that\n// produced the ticket text, so it doubles as a reference label - see the README).\nconst labelled = rows.filter(r => r.seed_category && r.valid === true);\nconst agreed = labelled.filter(r => r.agreed_with_seed === true);\nconst byCategory = {};\nfor (const r of routed) byCategory[r.category] = (byCategory[r.category] || 0) + 1;\nconst agreement = labelled.length ? Math.round((agreed.length / labelled.length) * 100) : null;\nconst notes = [\n  'classified ' + rows.length + ' ticket(s): ' + routed.length + ' routed, ' + review.length + ' to the triage desk',\n  unparsed.length ? unparsed.length + ' unparseable' : null,\n  invalid.length ? invalid.length + ' invalid values' : null,\n  lowConf.length ? lowConf.length + ' below min_confidence' : null,\n  agreement === null ? null : 'category matched the seed label on ' + agreed.length + '/' + labelled.length +\n    ' (' + agreement + '%)',\n].filter(Boolean).join('; ');\nreturn [{ json: {\n  total: rows.length,\n  routed: routed.length,\n  needs_review: review.length,\n  unparsed: unparsed.length,\n  invalid: invalid.length,\n  low_confidence: lowConf.length,\n  seed_agreement_pct: agreement,\n  by_category: byCategory,\n  notes,\n  tickets: rows.map(r => ({ ticket_no: r.ticket_no, action: r.action, category: r.category,\n                            priority: r.priority, confidence: r.confidence, route_to: r.route_to,\n                            seed_category: r.seed_category, agreed: r.agreed_with_seed,\n                            problems: r.problems })),\n} }];"
+      },
+      "id": "8c99768d-53cb-55d3-a48c-accb10176480",
+      "name": "Summarize run",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3660,
+        340
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "25493172-1a75-5576-bd2b-d32b15e06e46",
+              "name": "execution_id",
+              "value": "={{ $execution.id }}",
+              "type": "string"
+            },
+            {
+              "id": "463715bb-54ec-57a4-8f90-5b730f5ff238",
+              "name": "workflow_id",
+              "value": "={{ $workflow.id }}",
+              "type": "string"
+            },
+            {
+              "id": "59ca37b7-72d0-5356-baf8-cea0c2d8f2d4",
+              "name": "workflow_name",
+              "value": "={{ $workflow.name }}",
+              "type": "string"
+            },
+            {
+              "id": "6f68d91b-d983-5972-abf9-c059d702504f",
+              "name": "status",
+              "value": "={{ $json.needs_review > 0 ? 'warning' : 'success' }}",
+              "type": "string"
+            },
+            {
+              "id": "9856b45d-3973-51e2-b26a-62250f62b92e",
+              "name": "started_at",
+              "value": "={{ $('Triage settings').first().json.started_at }}",
+              "type": "string"
+            },
+            {
+              "id": "815caa83-4809-55cd-ae98-fd5de4e3ec11",
+              "name": "notes",
+              "value": "={{ $json.notes }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "dc3ef4f7-8ba4-5d45-a842-5a725683ee9a",
+      "name": "Log input (classified)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        3920,
+        340
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "d1adb364-8a29-55ab-8e75-449a4537cc0d",
+              "name": "execution_id",
+              "value": "={{ $execution.id }}",
+              "type": "string"
+            },
+            {
+              "id": "daf43489-ea43-514b-a995-c79fcb795dfc",
+              "name": "workflow_id",
+              "value": "={{ $workflow.id }}",
+              "type": "string"
+            },
+            {
+              "id": "d4a1e38f-0548-50d5-99c1-2601b7042ef7",
+              "name": "workflow_name",
+              "value": "={{ $workflow.name }}",
+              "type": "string"
+            },
+            {
+              "id": "18add6df-0a1e-574f-b1d2-4945e3c71cdc",
+              "name": "status",
+              "value": "info",
+              "type": "string"
+            },
+            {
+              "id": "c871c041-9be4-558d-b518-2c016eca7cbc",
+              "name": "started_at",
+              "value": "={{ $('Triage settings').first().json.started_at }}",
+              "type": "string"
+            },
+            {
+              "id": "aba674a5-b0c9-5833-814d-ef6f9836de27",
+              "name": "notes",
+              "value": "no open unassigned tickets to classify",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "0058886b-69bb-533f-94a0-3414b38ff375",
+      "name": "Log input (nothing to triage)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        3920,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "ALP08Observabili",
+          "mode": "id",
+          "cachedResultName": "P08 - Log execution"
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "6dc0d4b1-522e-5816-88fc-f83f54080496",
+      "name": "Log execution (P08)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1,
+      "position": [
+        4180,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## A02 - Ticket classification -> routing\nHourly (or manual): the oldest **open, unassigned** tickets -> one LLM call per ticket on a local Ollama model (`llama3.2:3b`, `format: json`, temperature 0) through a **Structured Output Parser**.\n\nOnly a parsed **and** valid classification at or above `min_confidence` writes to the row (`category`, `priority`, `status = triaged`, `assigned_to = <queue>`) and e-mails that queue. Everything else leaves the ticket untouched and goes to `triage@lab.local`: the workflow never stores a guess it cannot defend.\n\nPatterns: **P01** (error workflow), **P08** (exactly one `execution_log` row per run).",
+        "height": 270,
+        "width": 780,
+        "color": 4
+      },
+      "id": "070c6d9c-db18-5d43-bc84-3ed241f56f8e",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        -430
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Three ways a 3B model fails\n**Unparseable** - the chain node throws (`Failed to parse`); its **error output** feeds *Model output unusable*. `retryOnFail: 2` re-samples the model once before that.\n\n**Parseable but wrong** - `{\"category\": \"refund\"}` is valid JSON and invalid data; *Validate classification* checks the values against `billing|technical|account|shipping|other` and `low|normal|high|urgent`.\n\n**Right answer, wrong envelope** - the parser expects `{\"output\": {...}}` and silently strips anything else to `{}`. Measured on the four test tickets: 2/4 wrapped when only the parser asks, 4/4 once the system message asks too - which is why it does.\n\nAll three end as `action = review`: e-mail to the triage desk, ticket row untouched.",
+        "height": 320,
+        "width": 640,
+        "color": 3
+      },
+      "id": "6fd49ed7-edb3-5a31-bdb6-63bcc83fcb52",
+      "name": "Sticky Note 2",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1480,
+        -400
+      ]
+    }
+  ],
+  "connections": {
+    "Ollama chat model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Classify ticket (LLM)",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classification schema": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Classify ticket (LLM)",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Every hour": {
+      "main": [
+        [
+          {
+            "node": "Triage settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Triage settings": {
+      "main": [
+        [
+          {
+            "node": "Open tickets (oldest first)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Open tickets (oldest first)": {
+      "main": [
+        [
+          {
+            "node": "Any open tickets?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run once (manual / CLI)": {
+      "main": [
+        [
+          {
+            "node": "Triage settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Any open tickets?": {
+      "main": [
+        [
+          {
+            "node": "Loop over tickets",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log input (nothing to triage)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop over tickets": {
+      "main": [
+        [
+          {
+            "node": "Summarize run",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare prompt": {
+      "main": [
+        [
+          {
+            "node": "Classify ticket (LLM)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classify ticket (LLM)": {
+      "main": [
+        [
+          {
+            "node": "Validate classification",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Model output unusable",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate classification": {
+      "main": [
+        [
+          {
+            "node": "Decide routing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decide routing": {
+      "main": [
+        [
+          {
+            "node": "Valid and confident?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Model output unusable": {
+      "main": [
+        [
+          {
+            "node": "Decide routing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Valid and confident?": {
+      "main": [
+        [
+          {
+            "node": "Triage ticket (Postgres)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Notify the queue (Mailpit)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Triage ticket (Postgres)": {
+      "main": [
+        [
+          {
+            "node": "Notify the queue (Mailpit)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify the queue (Mailpit)": {
+      "main": [
+        [
+          {
+            "node": "Record notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record notification": {
+      "main": [
+        [
+          {
+            "node": "Outcome",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Outcome": {
+      "main": [
+        [
+          {
+            "node": "Loop over tickets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Summarize run": {
+      "main": [
+        [
+          {
+            "node": "Log input (classified)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log input (classified)": {
+      "main": [
+        [
+          {
+            "node": "Log execution (P08)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log input (nothing to triage)": {
+      "main": [
+        [
+          {
+            "node": "Log execution (P08)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Africa/Tripoli",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "ALP01ErrorHandle"
+  },
+  "pinData": {},
+  "versionId": "794ec6bb-3e7d-5d45-848c-20550e9c53bd",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "description": "Classifies open support tickets with a local Ollama model into a validated JSON schema and routes them to a queue; anything unparseable, invalid or low-confidence goes to a human and never touches the ticket row."
+  },
+  "id": "ALA02TicketClass",
+  "tags": [
+    {
+      "name": "automation-lab"
+    },
+    {
+      "name": "AI"
+    }
+  ]
+}

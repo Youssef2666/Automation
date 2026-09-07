@@ -149,3 +149,28 @@ Facts proven against the running stack on 2026-09-06. Add to this file whenever 
   regularly will page someone; validate in the caller, and keep "not found" as data (`ok: true, found: false`).
 - Manual-trigger-only harnesses cannot be activated (`publish.py` / the UI toggle refuse them: no trigger node).
   Run them with `scripts/dev/run-workflow.py <id>`; the sub-workflow they call must still be published.
+
+## Learned while shipping A02 (2026-09-07, Ollama + LangChain nodes)
+
+- **Structured Output Parser v1.2 (`schemaType: fromJson`) wraps your example in an `output` envelope.** It asks
+  the model for `{"output": {...your fields...}}`; an answer with the bare object parses into `{}` (zod strips
+  unknown keys) and the chain node emits `{}` - i.e. `{output: undefined}` - **with no error**. A correct
+  classification silently becomes an empty one, so validate the *values* downstream instead of trusting that a
+  green node means data. Measured with `llama3.2:3b` on four tickets: 2/4 answers wrapped when only the parser's
+  format instructions ask; **4/4** after adding one sentence to the system message
+  (`Return one JSON object with exactly one key, "output", holding ...`). Successful parses arrive as
+  `{"output": {...}}` -> read `$json.output`.
+- The raw model text is visible in the execution: `runData['<model node>'][run].data.ai_languageModel[0][0].json
+  .response.generations[0][0].text` (plus `tokenUsageEstimate`). That is how you tell "the model was wrong" from
+  "the parser threw the answer away".
+- `lmChatOllama` v1 `options.format = "json"` (builder: `ollama_chat(..., json_mode=True)`) works and keeps the
+  answer syntactically valid JSON, but says nothing about the *schema*: enums, ranges and required fields still
+  need a Code node.
+- `chainLlm` v1.4 with `onError: continueErrorOutput` behaves per item; combined with a `splitInBatches`
+  batch size of 1 (P05's single-item rule) each ticket fails on its own. `retryOnFail: 2` on the chain node is a
+  cheap re-sample of a model that rambled - it does not appear as a second run in the execution data.
+- CPU inference in this stack: ~19 s per short classification with `llama3.2:3b` (76 s for four, one at a time).
+  `OLLAMA_NUM_PARALLEL: 1`, so two agents driving Ollama serialise - a slow execution may be queueing, not stuck.
+- Probing the model directly is much faster than iterating through n8n:
+  `POST http://localhost:11434/api/chat {model, format: "json", stream: false, options: {temperature: 0},
+  messages: [{role: "system", ...}, {role: "user", ...}]}`.

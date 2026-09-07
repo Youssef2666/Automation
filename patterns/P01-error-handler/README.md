@@ -101,6 +101,7 @@ Every workflow in the catalog (`settings.errorWorkflow`). Direct references in f
 - `R02 - Bulk Certificate Generation from CSV`
 - `R03 - Data to Arabic RTL DOCX/PPTX Report`
 - `R04 - PDF to Structured Fields to Dataset`
+- `A02 - Ticket Classification and Routing`
 - `O05 - Execution Logs to Postgres to Metabase`
 
 The other patterns (P02, P03, P04, P06, P07, P08) also set P01 as their error workflow.
