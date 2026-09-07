@@ -69,7 +69,7 @@ current screenshot and passes `scripts/validate.py` (see [CONTRIBUTING.md](CONTR
 
 Generated from each folder's README front-matter. Do not edit between the markers.
 
-<!-- STATS:START -->**16 of 36 workflows shipped · 6 of 8 patterns**<!-- STATS:END -->
+<!-- STATS:START -->**18 of 36 workflows shipped · 6 of 8 patterns**<!-- STATS:END -->
 
 <!-- MATRIX:START -->
 ### Triggers (6/7 shipped)
@@ -94,15 +94,15 @@ Generated from each folder's README front-matter. Do not edit between the marker
 | D04 | Incremental Sync with Upsert and Dedupe | Advanced | - | - | 📋 planned |
 | D05 | Scheduled DB Dump to MinIO with Rotation | Intermediate | - | - | 📋 planned |
 
-### Monitoring (3/5 shipped)
+### Monitoring (5/5 shipped)
 
 | ID | Workflow | Difficulty | Patterns | Services | Status |
 |---|---|---|---|---|---|
 | M01 | [Uptime Monitor with Escalation](workflows/M01-uptime-monitor/) | Intermediate | [P01](patterns/P01-error-handler/), [P08](patterns/P08-observability/) | core | ✅ shipped |
-| M02 | GitHub Events to Chat Notification | Beginner | - | - | 📋 planned |
+| M02 | [GitHub Events to Chat Notification](workflows/M02-github-events-to-chat/) | Beginner | [P01](patterns/P01-error-handler/), [P03](patterns/P03-idempotency/), [P06](patterns/P06-testing/) | core (optional: GitHub webhook + Telegram bot token (both optional; the core path replays signed sample payloads into Mailpit)) | ✅ shipped |
 | M03 | [RSS Keyword-filtered Digest](workflows/M03-rss-keyword-digest/) | Beginner | [P01](patterns/P01-error-handler/) | core | ✅ shipped |
 | M04 | [DB Threshold Alert](workflows/M04-db-threshold-alert/) | Beginner | [P01](patterns/P01-error-handler/), [P08](patterns/P08-observability/) | core | ✅ shipped |
-| M05 | Price / Exchange-rate Watcher | Intermediate | - | - | 📋 planned |
+| M05 | [Price / Exchange-rate Watcher](workflows/M05-exchange-rate-watcher/) | Intermediate | [P01](patterns/P01-error-handler/), [P02](patterns/P02-retry-backoff/) | core (optional: none (the core path reads jittered USD rates from the local mock-api; swap the URL for a real provider)) | ✅ shipped |
 
 ### Documents (4/4 shipped)
 
@@ -151,12 +151,12 @@ Each pattern documents a failure story, the rule, its n8n implementation, the tr
 <!-- PATTERNS:START -->
 | ID | Pattern | Used by | Status |
 |---|---|---|---|
-| P01 | [Global Error Handler](patterns/P01-error-handler/) | [D01](workflows/D01-csv-import-validation/), [D03](workflows/D03-multi-source-aggregation/), [M01](workflows/M01-uptime-monitor/), [M03](workflows/M03-rss-keyword-digest/), [M04](workflows/M04-db-threshold-alert/), [O05](workflows/O05-execution-logs-metabase/), [R01](workflows/R01-pdf-invoice/), [R02](workflows/R02-bulk-certificates/), [R03](workflows/R03-arabic-rtl-report/), [R04](workflows/R04-pdf-to-dataset/), [T01](workflows/T01-webhook-to-database/), [T02](workflows/T02-daily-digest/), [T03](workflows/T03-api-polling/), [T04](workflows/T04-imap-attachment-parser/), [T05](workflows/T05-form-to-record/), [T06](workflows/T06-file-watcher/) | ✅ shipped |
-| P02 | [Retry with Exponential Backoff](patterns/P02-retry-backoff/) | [D03](workflows/D03-multi-source-aggregation/), [T03](workflows/T03-api-polling/) | ✅ shipped |
-| P03 | [Idempotency](patterns/P03-idempotency/) | [T01](workflows/T01-webhook-to-database/) | ✅ shipped |
+| P01 | [Global Error Handler](patterns/P01-error-handler/) | [D01](workflows/D01-csv-import-validation/), [D03](workflows/D03-multi-source-aggregation/), [M01](workflows/M01-uptime-monitor/), [M02](workflows/M02-github-events-to-chat/), [M03](workflows/M03-rss-keyword-digest/), [M04](workflows/M04-db-threshold-alert/), [M05](workflows/M05-exchange-rate-watcher/), [O05](workflows/O05-execution-logs-metabase/), [R01](workflows/R01-pdf-invoice/), [R02](workflows/R02-bulk-certificates/), [R03](workflows/R03-arabic-rtl-report/), [R04](workflows/R04-pdf-to-dataset/), [T01](workflows/T01-webhook-to-database/), [T02](workflows/T02-daily-digest/), [T03](workflows/T03-api-polling/), [T04](workflows/T04-imap-attachment-parser/), [T05](workflows/T05-form-to-record/), [T06](workflows/T06-file-watcher/) | ✅ shipped |
+| P02 | [Retry with Exponential Backoff](patterns/P02-retry-backoff/) | [D03](workflows/D03-multi-source-aggregation/), [M05](workflows/M05-exchange-rate-watcher/), [T03](workflows/T03-api-polling/) | ✅ shipped |
+| P03 | [Idempotency](patterns/P03-idempotency/) | [M02](workflows/M02-github-events-to-chat/), [T01](workflows/T01-webhook-to-database/) | ✅ shipped |
 | P04 | [Rate Limiting and Batching](patterns/P04-rate-limiting/) | [D03](workflows/D03-multi-source-aggregation/) | ✅ shipped |
 | P05 | Sub-workflow Modularity | - | 📋 planned |
-| P06 | [Testing and Mock Payloads](patterns/P06-testing/) | [T05](workflows/T05-form-to-record/) | ✅ shipped |
+| P06 | [Testing and Mock Payloads](patterns/P06-testing/) | [M02](workflows/M02-github-events-to-chat/), [T05](workflows/T05-form-to-record/) | ✅ shipped |
 | P07 | Secrets in a Public Repo | - | 📋 planned |
 | P08 | [Observability](patterns/P08-observability/) | [M01](workflows/M01-uptime-monitor/), [M04](workflows/M04-db-threshold-alert/), [O05](workflows/O05-execution-logs-metabase/) | ✅ shipped |
 <!-- PATTERNS:END -->

@@ -1,0 +1,662 @@
+{
+  "name": "M02 - GitHub Events to Chat Notification",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "m02-github",
+        "responseMode": "responseNode",
+        "options": {
+          "rawBody": true
+        }
+      },
+      "id": "419ae186-95af-51ff-b9f9-4a6158e0aeca",
+      "name": "GitHub webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "c9f05442-f323-5766-8539-e2cd698bf318"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "56abbcff-0929-5e9d-ac55-9d0502e6cf6f",
+              "name": "shared_secret",
+              "value": "lab-demo-key",
+              "type": "string"
+            },
+            {
+              "id": "b1deaa4e-cf81-5d0b-ba32-dd15ae0f9b05",
+              "name": "notify",
+              "value": "dev@lab.local",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {},
+        "includeOtherFields": true
+      },
+      "id": "b56c5d47-a158-5335-9fd7-bd6d64c37e3e",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        260,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "action": "hmac",
+        "type": "SHA256",
+        "dataPropertyName": "hmac",
+        "secret": "={{ $json.shared_secret }}",
+        "encoding": "hex",
+        "binaryData": true,
+        "binaryPropertyName": "data"
+      },
+      "id": "61ad00be-3c5c-5f70-8a07-bf51e549727f",
+      "name": "HMAC-SHA256 of raw body",
+      "type": "n8n-nodes-base.crypto",
+      "typeVersion": 1,
+      "position": [
+        520,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// GitHub signs the raw body: sha256=HMAC_SHA256(secret, body). The Crypto node computed the HMAC over the raw\n// binary body (rawBody is enabled on the Webhook node); here we compare it with the header, constant-length.\nconst req = $('GitHub webhook').first().json;\nconst headers = req.headers || {};\nconst expected = 'sha256=' + String($json.hmac || '');\nconst given = String(headers['x-hub-signature-256'] || '');\nlet valid = given.length === expected.length;\nfor (let i = 0; i < expected.length; i++) valid = valid && (given.charCodeAt(i) === expected.charCodeAt(i));\nreturn [{ json: {\n  valid, event: String(headers['x-github-event'] || 'unknown'),\n  delivery: String(headers['x-github-delivery'] || ''),\n  body: req.body || {},\n}}];"
+      },
+      "id": "0888c308-e40f-5ef4-9fa8-a1839dc6a9e4",
+      "name": "Verify signature",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        780,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "a1c10d9f-33d4-55d3-ae56-57d27568e215",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "22b6041f-9a7d-50e1-b4a4-aa5e28bc1fb7",
+      "name": "Signature valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1040,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "options": {
+          "responseCode": 401
+        },
+        "responseBody": "={{ { ok: false, error: \"invalid signature\" } }}"
+      },
+      "id": "d12fcbb7-3d50-5857-bcca-cb513c355658",
+      "name": "Respond 401",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1300,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "e5739edc-8208-5db7-a193-8e18ca0403e6",
+              "name": "external_id",
+              "value": "={{ $json.delivery || $json.body.after || 'no-delivery-id' }}",
+              "type": "string"
+            },
+            {
+              "id": "6d7f5e16-cb88-5c19-b8b7-7bb501edc316",
+              "name": "scope",
+              "value": "m02-github",
+              "type": "string"
+            },
+            {
+              "id": "ec911d83-107d-5dee-9ff3-1596e99d0511",
+              "name": "ttl_seconds",
+              "value": 604800,
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "5900c816-837d-5328-bac7-c73a773e619f",
+      "name": "Guard input",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1300,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "ALP03Idempotency",
+          "mode": "id",
+          "cachedResultName": "P03 - Idempotency guard"
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "6cd389e7-9598-50e8-8bad-a54f3b59a50d",
+      "name": "Idempotency guard (P03)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1,
+      "position": [
+        1560,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "1b2fc7cb-6c6a-555f-b847-162fce6f9562",
+              "leftValue": "={{ $json.duplicate }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "08311b52-f321-54e6-bc61-465eb0b0ead6",
+      "name": "Duplicate delivery?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1820,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "options": {},
+        "responseBody": "={{ { ok: true, duplicate: true } }}"
+      },
+      "id": "9aac33ff-97ac-5f8c-bea6-71743c0f0782",
+      "name": "Respond 200 (duplicate)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        2080,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $('Verify signature').first().json.event }}",
+                    "rightValue": "push",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "push"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $('Verify signature').first().json.event }}",
+                    "rightValue": "issues",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "issues"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "id": "d1208c36-79f8-59ad-a07a-386b84555051",
+      "name": "Route by event",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        2080,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Turn a GitHub event into one chat-style message (Markdown-ish text + HTML).\nconst ev = $('Verify signature').first().json;\nconst b = ev.body || {};\nconst repo = (b.repository && b.repository.full_name) || 'unknown/repo';\nlet title = '', lines = [], severity = 'info';\nif (ev.event === 'push') {\n  const branch = String(b.ref || '').replace('refs/heads/', '');\n  const commits = Array.isArray(b.commits) ? b.commits : [];\n  title = `push to ${repo}@${branch}: ${commits.length} commit(s) by ${(b.pusher && b.pusher.name) || (b.sender && b.sender.login) || '?'}`;\n  lines = commits.slice(0, 10).map(c => `${String(c.id || '').slice(0, 7)} ${String(c.message || '').split('\\n')[0]}`);\n  if (b.forced) { severity = 'warning'; lines.unshift('FORCE PUSH'); }\n} else if (ev.event === 'issues') {\n  const i = b.issue || {};\n  title = `issue ${b.action}: #${i.number} ${i.title} (${repo})`;\n  lines = [`by ${(i.user && i.user.login) || '?'}`, ...(i.labels || []).map(l => `label: ${l.name || l}`), (i.html_url || '')];\n  if (['opened', 'reopened'].includes(b.action)) severity = 'warning';\n} else {\n  title = `${ev.event} event on ${repo}`;\n  lines = [JSON.stringify(b).slice(0, 200)];\n}\nconst text = [title, ...lines].join('\\n');\nconst html = `<b>${title}</b><br>` + lines.map(l => `&bull; ${l}`).join('<br>');\nreturn [{ json: { event: ev.event, delivery: ev.delivery, repo, title, text, html, severity } }];"
+      },
+      "id": "72d8cfaa-e8a7-51a3-81e1-dff245d9465a",
+      "name": "Format push",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2340,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Turn a GitHub event into one chat-style message (Markdown-ish text + HTML).\nconst ev = $('Verify signature').first().json;\nconst b = ev.body || {};\nconst repo = (b.repository && b.repository.full_name) || 'unknown/repo';\nlet title = '', lines = [], severity = 'info';\nif (ev.event === 'push') {\n  const branch = String(b.ref || '').replace('refs/heads/', '');\n  const commits = Array.isArray(b.commits) ? b.commits : [];\n  title = `push to ${repo}@${branch}: ${commits.length} commit(s) by ${(b.pusher && b.pusher.name) || (b.sender && b.sender.login) || '?'}`;\n  lines = commits.slice(0, 10).map(c => `${String(c.id || '').slice(0, 7)} ${String(c.message || '').split('\\n')[0]}`);\n  if (b.forced) { severity = 'warning'; lines.unshift('FORCE PUSH'); }\n} else if (ev.event === 'issues') {\n  const i = b.issue || {};\n  title = `issue ${b.action}: #${i.number} ${i.title} (${repo})`;\n  lines = [`by ${(i.user && i.user.login) || '?'}`, ...(i.labels || []).map(l => `label: ${l.name || l}`), (i.html_url || '')];\n  if (['opened', 'reopened'].includes(b.action)) severity = 'warning';\n} else {\n  title = `${ev.event} event on ${repo}`;\n  lines = [JSON.stringify(b).slice(0, 200)];\n}\nconst text = [title, ...lines].join('\\n');\nconst html = `<b>${title}</b><br>` + lines.map(l => `&bull; ${l}`).join('<br>');\nreturn [{ json: { event: ev.event, delivery: ev.delivery, repo, title, text, html, severity } }];"
+      },
+      "id": "7f3bc0aa-8d5b-5517-a206-f62e3729954c",
+      "name": "Format issue",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2340,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Turn a GitHub event into one chat-style message (Markdown-ish text + HTML).\nconst ev = $('Verify signature').first().json;\nconst b = ev.body || {};\nconst repo = (b.repository && b.repository.full_name) || 'unknown/repo';\nlet title = '', lines = [], severity = 'info';\nif (ev.event === 'push') {\n  const branch = String(b.ref || '').replace('refs/heads/', '');\n  const commits = Array.isArray(b.commits) ? b.commits : [];\n  title = `push to ${repo}@${branch}: ${commits.length} commit(s) by ${(b.pusher && b.pusher.name) || (b.sender && b.sender.login) || '?'}`;\n  lines = commits.slice(0, 10).map(c => `${String(c.id || '').slice(0, 7)} ${String(c.message || '').split('\\n')[0]}`);\n  if (b.forced) { severity = 'warning'; lines.unshift('FORCE PUSH'); }\n} else if (ev.event === 'issues') {\n  const i = b.issue || {};\n  title = `issue ${b.action}: #${i.number} ${i.title} (${repo})`;\n  lines = [`by ${(i.user && i.user.login) || '?'}`, ...(i.labels || []).map(l => `label: ${l.name || l}`), (i.html_url || '')];\n  if (['opened', 'reopened'].includes(b.action)) severity = 'warning';\n} else {\n  title = `${ev.event} event on ${repo}`;\n  lines = [JSON.stringify(b).slice(0, 200)];\n}\nconst text = [title, ...lines].join('\\n');\nconst html = `<b>${title}</b><br>` + lines.map(l => `&bull; ${l}`).join('<br>');\nreturn [{ json: { event: ev.event, delivery: ev.delivery, repo, title, text, html, severity } }];"
+      },
+      "id": "31b2aa44-b695-5b2d-96b3-df44b7217067",
+      "name": "Format other",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2340,
+        440
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "automation-lab@lab.local",
+        "toEmail": "={{ $('Config').first().json.notify }}",
+        "subject": "=[github] {{ $json.title }}",
+        "options": {},
+        "emailFormat": "html",
+        "html": "={{ $json.html }}"
+      },
+      "id": "5cac1f90-b6d7-5c5d-b215-befdbfc154a8",
+      "name": "Notify dev channel (Mailpit)",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        2600,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "smtp": {
+          "id": "ALcredSmtpMailpt",
+          "name": "SMTP - Mailpit"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "schema": {
+          "__rl": true,
+          "value": "public",
+          "mode": "list"
+        },
+        "table": {
+          "__rl": true,
+          "value": "notifications",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "channel": "email",
+            "target": "={{ $('Config').first().json.notify }}",
+            "subject": "={{ $('Format push').first().json.title || $('Format issue').first().json.title || $('Format other').first().json.title }}",
+            "body": "=delivery {{ $('Verify signature').first().json.delivery }}",
+            "severity": "info",
+            "sent_at": "={{ $now.toISO() }}"
+          },
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "c508f744-160b-5840-a188-76cee0eb28cc",
+      "name": "Record notification",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2860,
+        0
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "postgres": {
+          "id": "ALcredPostgresDm",
+          "name": "Postgres - demo"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "options": {
+          "responseCode": 202
+        },
+        "responseBody": "={{ { ok: true, event: $(\"Verify signature\").first().json.event } }}"
+      },
+      "id": "aea26efa-17d6-5a64-8d01-c0ef91ba26f6",
+      "name": "Respond 202",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        3120,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## M02 - GitHub events -> chat\n`POST /webhook/m02-github` with the GitHub headers. The body is verified with **HMAC-SHA256** (`X-Hub-Signature-256`, shared secret = `LAB_WEBHOOK_KEY`), deduplicated on `X-GitHub-Delivery` (P03, 7 days), routed by `X-GitHub-Event` (push / issues / other) and posted as one message.\n\nCore path posts to Mailpit (`dev@lab.local`); add a Telegram node (credential `Telegram - bot`) for a real chat. `test/send.py` signs and replays the seed payloads.",
+        "height": 250,
+        "width": 660,
+        "color": 4
+      },
+      "id": "c39a85d8-3326-54fd-bf1c-77abb25401e1",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -40,
+        -360
+      ]
+    }
+  ],
+  "connections": {
+    "GitHub webhook": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "HMAC-SHA256 of raw body",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HMAC-SHA256 of raw body": {
+      "main": [
+        [
+          {
+            "node": "Verify signature",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify signature": {
+      "main": [
+        [
+          {
+            "node": "Signature valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Signature valid?": {
+      "main": [
+        [
+          {
+            "node": "Guard input",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond 401",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guard input": {
+      "main": [
+        [
+          {
+            "node": "Idempotency guard (P03)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Idempotency guard (P03)": {
+      "main": [
+        [
+          {
+            "node": "Duplicate delivery?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Duplicate delivery?": {
+      "main": [
+        [
+          {
+            "node": "Respond 200 (duplicate)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Route by event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by event": {
+      "main": [
+        [
+          {
+            "node": "Format push",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format issue",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format other",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format push": {
+      "main": [
+        [
+          {
+            "node": "Notify dev channel (Mailpit)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format issue": {
+      "main": [
+        [
+          {
+            "node": "Notify dev channel (Mailpit)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format other": {
+      "main": [
+        [
+          {
+            "node": "Notify dev channel (Mailpit)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify dev channel (Mailpit)": {
+      "main": [
+        [
+          {
+            "node": "Record notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record notification": {
+      "main": [
+        [
+          {
+            "node": "Respond 202",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Africa/Tripoli",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "ALP01ErrorHandle"
+  },
+  "pinData": {},
+  "versionId": "e734774d-5797-5e1a-ba66-74c2feda753a",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "description": "Signed GitHub webhooks -> verified, deduplicated, routed, and posted as chat-style notifications."
+  },
+  "id": "ALM02GithubEvent",
+  "tags": [
+    {
+      "name": "automation-lab"
+    },
+    {
+      "name": "Monitoring"
+    }
+  ]
+}

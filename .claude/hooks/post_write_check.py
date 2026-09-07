@@ -110,7 +110,8 @@ def main() -> None:
 
     if path.name == "workflow.json":
         errors, warnings = check_workflow_json(path)
-    elif path.name == "README.md" and (r.startswith("workflows/") or r.startswith("patterns/")):
+    elif path.name == "README.md" and (r.startswith("workflows/") or r.startswith("patterns/")) and r.count("/") == 2:
+        # only the folder README carries front-matter; test/README.md and friends are plain notes
         errors, warnings = check_readme(path)
     elif path.suffix == ".py":
         try:

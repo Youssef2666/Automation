@@ -1,0 +1,723 @@
+{
+  "name": "M05 - Price / Exchange-rate Watcher",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 1
+            }
+          ]
+        }
+      },
+      "id": "ad305eab-f0e3-5df8-86ef-55d1c846a2b6",
+      "name": "Every hour",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "8878e0f5-092a-5683-ad6e-8459ab0662de",
+      "name": "Run once (manual / CLI)",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "6f904d7a-bbe8-5d83-98ea-2b71fa778688",
+              "name": "quotes",
+              "value": "EUR, GBP, LYD, EGP, TRY, AED, SAR",
+              "type": "string"
+            },
+            {
+              "id": "cf93504b-f314-5627-b6b5-1c399359cef7",
+              "name": "threshold_pct",
+              "value": 0.5,
+              "type": "number"
+            },
+            {
+              "id": "882bfe52-ea22-5194-a400-deff415d6ac2",
+              "name": "report_to",
+              "value": "finance@lab.local",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "80bdacc4-3719-5052-b9bd-dd6f1768a8cc",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        260,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "d269f145-80b1-5e15-b897-0a26128755d4",
+              "name": "url",
+              "value": "http://mock-api:8080/rates/latest",
+              "type": "string"
+            },
+            {
+              "id": "77c04386-23da-5248-a607-a821698a02cb",
+              "name": "max_attempts",
+              "value": 4,
+              "type": "number"
+            },
+            {
+              "id": "9b6dc925-080c-511c-9abf-83e0d7ebd183",
+              "name": "base_ms",
+              "value": 500,
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "126b506e-be69-5609-810e-8d4b995132ba",
+      "name": "Rates request",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        520,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "ALP02RetryBackof",
+          "mode": "id",
+          "cachedResultName": "P02 - HTTP with backoff"
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "a1da5d02-8ea2-5fbd-9842-76a4c5a683a2",
+      "name": "Fetch rates (P02)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1,
+      "position": [
+        780,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ec11c9d5-a3d7-52e5-91c5-4fedfcabfc53",
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "8dddf19e-f868-59ff-9b8e-769ca050bee4",
+      "name": "Fetched OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1040,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "errorMessage": "=M05: rate provider failed after {{ $json.attempts }} attempt(s): {{ $json.response }}"
+      },
+      "id": "ce677cad-38f1-5728-a098-2f182694cead",
+      "name": "Rates unavailable",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        1300,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select distinct on (quote) quote, rate::float as rate, fetched_at from rate_history where base = 'USD' order by quote, fetched_at desc",
+        "options": {}
+      },
+      "id": "4937b087-7e9e-558b-ae9a-23389d737c83",
+      "name": "Last stored rate per quote",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1300,
+        220
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "ALcredPostgresDm",
+          "name": "Postgres - demo"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Latest rates (P02 result) vs the last stored rate per quote.\nconst cfg = $('Config').first().json;\nconst res = $('Fetch rates (P02)').first().json;\nconst latest = (res.data && res.data.rates) || {};\nconst fetchedAt = (res.data && res.data.date) || new Date().toISOString();\nconst last = {};\nfor (const it of $input.all()) if (it.json.quote) last[it.json.quote] = Number(it.json.rate);\nconst watch = String(cfg.quotes || '').split(',').map(s => s.trim().toUpperCase()).filter(Boolean);\nconst out = [];\nfor (const q of watch) {\n  const rate = Number(latest[q]);\n  if (!Number.isFinite(rate)) continue;\n  const prev = last[q];\n  const change = prev ? ((rate - prev) / prev) * 100 : 0;\n  out.push({ json: { base: 'USD', quote: q, rate, previous: prev ?? null,\n                     change_pct: Math.round(change * 1000) / 1000, fetched_at: fetchedAt,\n                     alert: prev !== undefined && Math.abs(change) >= Number(cfg.threshold_pct),\n                     direction: change > 0 ? 'up' : change < 0 ? 'down' : 'flat' } });\n}\nreturn out;"
+      },
+      "id": "063abb7b-9d05-57eb-998a-1aad7908c6b4",
+      "name": "Compare with history",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "schema": {
+          "__rl": true,
+          "value": "public",
+          "mode": "list"
+        },
+        "table": {
+          "__rl": true,
+          "value": "rate_history",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "base": "={{ $json.base }}",
+            "quote": "={{ $json.quote }}",
+            "rate": "={{ $json.rate }}",
+            "fetched_at": "={{ $now.toISO() }}"
+          },
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "77db6390-7b4b-5bec-8ea8-8c06284d0bc6",
+      "name": "Insert rate_history",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1820,
+        0
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "postgres": {
+          "id": "ALcredPostgresDm",
+          "name": "Postgres - demo"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "15f43483-1500-5071-ba5c-4c8f080abfdd",
+              "leftValue": "={{ $('Compare with history').item.json.alert }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "57f6b19d-4a51-5967-b59d-f0db6948db75",
+      "name": "Moved beyond threshold?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2080,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "incr",
+        "key": "=m05:alert:{{ $('Compare with history').item.json.quote }}",
+        "expire": true,
+        "ttl": 21600
+      },
+      "id": "0d6ef50d-8164-5fdc-a4c7-63ccb7a4c0cd",
+      "name": "Cooldown per pair (INCR)",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        2340,
+        0
+      ],
+      "credentials": {
+        "redis": {
+          "id": "ALcredRedisLocal",
+          "name": "Redis - local"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c3dda959-4871-59d0-a607-a767cf9fe463",
+              "leftValue": "={{ Number(Object.values($json)[0]) }}",
+              "rightValue": 1,
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "d96ee2d5-f954-55af-ac2b-b0de62cf5458",
+      "name": "First alert in 6 h?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2600,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "f6cf91c1-b314-5120-99dc-5f950cb90c95",
+              "name": "quote",
+              "value": "={{ $('Compare with history').item.json.quote }}",
+              "type": "string"
+            },
+            {
+              "id": "276137b8-7634-5df8-814f-e71ae599c56d",
+              "name": "rate",
+              "value": "={{ $('Compare with history').item.json.rate }}",
+              "type": "number"
+            },
+            {
+              "id": "e70173f6-dd5d-5b90-b5bd-f15959e5dd40",
+              "name": "previous",
+              "value": "={{ $('Compare with history').item.json.previous }}",
+              "type": "number"
+            },
+            {
+              "id": "faab3ebf-e02f-593b-97ff-321b5912b178",
+              "name": "change_pct",
+              "value": "={{ $('Compare with history').item.json.change_pct }}",
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "589b351a-5190-5111-bb62-f4a08627b286",
+      "name": "Alert row",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2860,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "destinationFieldName": "data",
+        "options": {}
+      },
+      "id": "06071cf7-856b-5cc2-abe7-0ab756761e06",
+      "name": "Collect alerts",
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        3120,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "automation-lab@lab.local",
+        "toEmail": "={{ $('Config').first().json.report_to }}",
+        "subject": "=[Automation Lab] FX alert: {{ $json.data.map(r => 'USD/' + r.quote + ' ' + r.change_pct + '%').join(', ') }}",
+        "options": {},
+        "emailFormat": "html",
+        "html": "=<h3 style=\"font-family:sans-serif\">Exchange-rate alert (USD base)</h3>\n<table style=\"font-family:sans-serif;border-collapse:collapse\" cellpadding=\"6\">\n<tr><th align=\"left\">Pair</th><th align=\"right\">Previous</th><th align=\"right\">Now</th><th align=\"right\">Change</th></tr>\n{{ $json.data.map(r => '<tr><td>USD/' + r.quote + '</td><td align=\"right\">' + r.previous + '</td><td align=\"right\">' + r.rate + '</td><td align=\"right\">' + r.change_pct + '%</td></tr>').join('') }}\n</table>\n<p style=\"color:#888\">Threshold {{ $('Config').first().json.threshold_pct }}%. Next alert per pair no sooner than 6 h. M05 - Automation Lab.</p>"
+      },
+      "id": "2e025ecd-ce50-5a9c-9521-0eceb2b77a95",
+      "name": "Alert e-mail (Mailpit)",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        3380,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "smtp": {
+          "id": "ALcredSmtpMailpt",
+          "name": "SMTP - Mailpit"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "schema": {
+          "__rl": true,
+          "value": "public",
+          "mode": "list"
+        },
+        "table": {
+          "__rl": true,
+          "value": "notifications",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "channel": "email",
+            "target": "={{ $('Config').first().json.report_to }}",
+            "subject": "={{ $('Alert e-mail (Mailpit)').item.json.accepted ? 'FX alert sent' : 'FX alert' }}",
+            "body": "={{ JSON.stringify($('Collect alerts').first().json.data) }}",
+            "severity": "warning",
+            "sent_at": "={{ $now.toISO() }}"
+          },
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "016c929a-5e81-5600-a03d-e865fe5d9844",
+      "name": "Record notification",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        3640,
+        0
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "postgres": {
+          "id": "ALcredPostgresDm",
+          "name": "Postgres - demo"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "d39ec8dc-4537-5888-af6e-2ac2c99118d0",
+      "name": "Within threshold",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        2340,
+        220
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "f2a67860-64e8-5c74-8dea-43b020b8aa8d",
+      "name": "Suppressed (cooldown)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        2860,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## M05 - Exchange-rate watcher\nProvider = mock-api `/rates/latest` (USD base, rates drift a little on every call). Fetch via **P02** (backoff), compare each quote with its last `rate_history` row, store the new rates, alert when a pair moved >= `threshold_pct` (Config).\n\nPer-pair **cooldown** in Redis (6 h) keeps a volatile pair from spamming. First run: no previous -> no alert.",
+        "height": 220,
+        "width": 640,
+        "color": 4
+      },
+      "id": "a31c2e1f-7e57-53b5-806d-2bfe9fd2d4de",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -40,
+        -330
+      ]
+    }
+  ],
+  "connections": {
+    "Every hour": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "Rates request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rates request": {
+      "main": [
+        [
+          {
+            "node": "Fetch rates (P02)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch rates (P02)": {
+      "main": [
+        [
+          {
+            "node": "Fetched OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run once (manual / CLI)": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetched OK?": {
+      "main": [
+        [
+          {
+            "node": "Last stored rate per quote",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Rates unavailable",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Last stored rate per quote": {
+      "main": [
+        [
+          {
+            "node": "Compare with history",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compare with history": {
+      "main": [
+        [
+          {
+            "node": "Insert rate_history",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert rate_history": {
+      "main": [
+        [
+          {
+            "node": "Moved beyond threshold?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Moved beyond threshold?": {
+      "main": [
+        [
+          {
+            "node": "Cooldown per pair (INCR)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Within threshold",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cooldown per pair (INCR)": {
+      "main": [
+        [
+          {
+            "node": "First alert in 6 h?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "First alert in 6 h?": {
+      "main": [
+        [
+          {
+            "node": "Alert row",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Suppressed (cooldown)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Alert row": {
+      "main": [
+        [
+          {
+            "node": "Collect alerts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect alerts": {
+      "main": [
+        [
+          {
+            "node": "Alert e-mail (Mailpit)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Alert e-mail (Mailpit)": {
+      "main": [
+        [
+          {
+            "node": "Record notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Africa/Tripoli",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "ALP01ErrorHandle"
+  },
+  "pinData": {},
+  "versionId": "bf0a2ebd-7bcf-5191-8083-2b5a0f5fbe57",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "description": "Hourly rate fetch through P02, history in Postgres, threshold alerts with per-pair cooldown."
+  },
+  "id": "ALM05ExchangeRat",
+  "tags": [
+    {
+      "name": "automation-lab"
+    },
+    {
+      "name": "Monitoring"
+    }
+  ]
+}

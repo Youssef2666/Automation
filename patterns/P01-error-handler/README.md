@@ -85,3 +85,5 @@ Every workflow in the catalog (`settings.errorWorkflow`). Direct references in f
 - `T02 - Scheduled Daily Digest`
 - `T03 - Polling an API Without Webhooks`
 - `D01 - CSV/XLSX Import with Row-level Validation`
+- `M02 - GitHub Events to Chat Notification`
+- `M05 - Price / Exchange-rate Watcher`
