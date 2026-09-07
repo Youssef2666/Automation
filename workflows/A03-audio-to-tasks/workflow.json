@@ -1,0 +1,928 @@
+{
+  "name": "A03 - Audio to Transcript, Summary and Task List",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "5beaf13a-7a8d-5a3b-b014-135ea5ade5da",
+      "name": "Run once (manual / CLI)",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "3fa5ee76-3ff0-5164-9587-9d2fc03d0fba",
+              "name": "started_at",
+              "value": "={{ $now.toISO() }}",
+              "type": "string"
+            },
+            {
+              "id": "b9473149-74de-5ff8-8c53-272cfa6a5183",
+              "name": "run_id",
+              "value": "={{ $now.toFormat('yyyyLLdd-HHmmss') }}",
+              "type": "string"
+            },
+            {
+              "id": "a2a83a4f-1d0e-5238-af09-3f1d01633431",
+              "name": "audio_file",
+              "value": "/home/node/.n8n-files/seed/meeting-clip.wav",
+              "type": "string"
+            },
+            {
+              "id": "669c0414-34bc-5547-a3e7-e8296c9a62ff",
+              "name": "out_dir",
+              "value": "/home/node/.n8n-files/data/out",
+              "type": "string"
+            },
+            {
+              "id": "575cc7a8-4228-5b67-9de7-e236853a9901",
+              "name": "meeting_title",
+              "value": "Weekly ops standup",
+              "type": "string"
+            },
+            {
+              "id": "922d106a-ab90-5cab-ae0b-5ee484146ce4",
+              "name": "meeting_date",
+              "value": "={{ $now.toFormat('yyyy-LL-dd') }}",
+              "type": "string"
+            },
+            {
+              "id": "78f8c6ca-3e61-5d2f-96f8-365c3b976a36",
+              "name": "language",
+              "value": "en",
+              "type": "string"
+            },
+            {
+              "id": "a9ca176e-9ad7-5110-b163-d6f99e67f8ad",
+              "name": "vad_filter",
+              "value": "false",
+              "type": "string"
+            },
+            {
+              "id": "9e2f8f64-ee86-51ab-9a35-a931e766af89",
+              "name": "asr_engine",
+              "value": "faster_whisper",
+              "type": "string"
+            },
+            {
+              "id": "fb88d083-d5cd-5a33-a72f-b1f4ba01e909",
+              "name": "asr_model",
+              "value": "base",
+              "type": "string"
+            },
+            {
+              "id": "56823472-e7b2-5922-b77f-64f110168d17",
+              "name": "min_words",
+              "value": 12,
+              "type": "number"
+            },
+            {
+              "id": "7257b886-487c-5562-800d-3a07b0652f1a",
+              "name": "max_no_speech",
+              "value": 0.6,
+              "type": "number"
+            },
+            {
+              "id": "a9a909dd-87fd-5d75-9299-3feb926b1f52",
+              "name": "min_avg_logprob",
+              "value": -1.0,
+              "type": "number"
+            },
+            {
+              "id": "db797cce-ad5e-5725-82ca-d8a3bbe43459",
+              "name": "max_repetition",
+              "value": 0.5,
+              "type": "number"
+            },
+            {
+              "id": "c7b515d3-6a04-5612-a6fc-1db3bb12ec82",
+              "name": "max_tasks",
+              "value": 25,
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a742bfb2-51a0-5ad3-b34c-b96a488a7af4",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        260,
+        0
+      ],
+      "notes": "Everything tunable lives here: the recording, the ASR language and the four quality-gate limits (min_words / max_no_speech / min_avg_logprob / max_repetition). vad_filter is a query flag, hence the string.",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "fileSelector": "={{ $json.audio_file }}",
+        "options": {
+          "dataPropertyName": "data"
+        }
+      },
+      "id": "91ee129d-e3fd-5602-a300-e50bf7046de5",
+      "name": "Read audio",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        520,
+        0
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "2d26a7e1-9fd9-5894-bb98-36c8167d9443",
+              "leftValue": "={{ $binary?.data?.fileName }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "fb2bf995-1a6b-5320-89ca-6d627d34658f",
+      "name": "Audio file found?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        780,
+        0
+      ],
+      "notes": "Read/Write File is a glob: a path that matches nothing returns zero items and the run would end green having done nothing. alwaysOutputData + this check turn that silence into a failure.",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "errorMessage": "=A03: no file matched {{ $('Config').first().json.audio_file }}"
+      },
+      "id": "796e95ad-b77f-575a-b665-1f1b3471b491",
+      "name": "Missing recording",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        1040,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://whisper:9000/asr",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          },
+          "timeout": 600000
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "encode",
+              "value": "true"
+            },
+            {
+              "name": "task",
+              "value": "transcribe"
+            },
+            {
+              "name": "language",
+              "value": "={{ $('Config').first().json.language }}"
+            },
+            {
+              "name": "vad_filter",
+              "value": "={{ $('Config').first().json.vad_filter }}"
+            },
+            {
+              "name": "word_timestamps",
+              "value": "false"
+            },
+            {
+              "name": "output",
+              "value": "json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "audio_file",
+              "inputDataFieldName": "data"
+            }
+          ]
+        }
+      },
+      "id": "c24f79cf-d918-551e-a2a3-788a844ad02a",
+      "name": "Transcribe (Whisper)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1040,
+        220
+      ],
+      "notes": "POST /asr, multipart field `audio_file`. The service answers text/plain even for output=json, so responseFormat is text and the body arrives as a string in $json.data. 10 min timeout: `base` on CPU runs at roughly 1x-3x realtime; a retry re-transcribes the whole file, so only 2 tries.",
+      "notesInFlow": true,
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "const cfg = $('Config').first().json;\nconst raw = $input.first().json.data;\nlet asr;\ntry { asr = typeof raw === 'string' ? JSON.parse(raw) : raw; }\ncatch (e) {\n  throw new Error('A03: /asr?output=json did not return JSON (got ' + String(raw).slice(0, 160) + ')');\n}\nif (!asr || typeof asr !== 'object' || !('text' in asr)) {\n  throw new Error('A03: unexpected ASR body, no \"text\" key: ' + JSON.stringify(asr).slice(0, 200));\n}\n\nconst num = (v) => (Number.isFinite(Number(v)) ? Number(v) : null);\nconst mean = (xs) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);\nconst round = (v, d = 3) => (v === null ? null : Math.round(v * 10 ** d) / 10 ** d);\n\nconst segments = (Array.isArray(asr.segments) ? asr.segments : []).map((s) => ({\n  id: num(s.id), start: round(num(s.start), 2), end: round(num(s.end), 2),\n  text: String(s.text ?? '').trim(),\n  avg_logprob: round(num(s.avg_logprob)), no_speech_prob: round(num(s.no_speech_prob)),\n  compression_ratio: round(num(s.compression_ratio)),\n}));\nconst text = String(asr.text ?? '').replace(/\\s+/g, ' ').trim();\nconst word_count = text ? text.split(/\\s+/).length : 0;\nconst audio_seconds = segments.length ? round(segments[segments.length - 1].end, 2) : 0;\nconst no_speech = round(mean(segments.map((s) => s.no_speech_prob).filter((v) => v !== null)));\nconst logprob = round(mean(segments.map((s) => s.avg_logprob).filter((v) => v !== null)));\n\n// Quality gate. Whisper never says \"I heard nothing\": on silence or non-speech it emits plausible sentences.\n// Four signals - length, the model's own two confidence numbers, and verbatim repetition, which is what a\n// Whisper decoding loop looks like from the outside (\"I'm sorry. I'm sorry. I'm sorry.\").\nconst unique_segments = new Set(segments.map((s) => s.text.toLowerCase())).size;\nconst repetition = segments.length >= 3 ? round(1 - unique_segments / segments.length, 2) : 0;\nconst reasons = [];\nif (word_count < Number(cfg.min_words)) reasons.push(`only ${word_count} words (min ${cfg.min_words})`);\nif (no_speech !== null && no_speech > Number(cfg.max_no_speech)) {\n  reasons.push(`mean no_speech_prob ${no_speech} > ${cfg.max_no_speech}`);\n}\nif (logprob !== null && logprob < Number(cfg.min_avg_logprob)) {\n  reasons.push(`mean avg_logprob ${logprob} < ${cfg.min_avg_logprob}`);\n}\nif (repetition > Number(cfg.max_repetition)) {\n  reasons.push(`${Math.round(repetition * 100)}% of the ${segments.length} segments repeat verbatim`);\n}\nif (!segments.length) reasons.push('no segments returned');\n\nconst file = String(cfg.audio_file);\nconst file_name = file.split('/').pop();\nreturn [{ json: {\n  run_id: cfg.run_id, started_at: cfg.started_at,\n  audio_file: file, file_name, source: `a03:${file_name}`,\n  meeting_title: cfg.meeting_title, meeting_date: cfg.meeting_date,\n  language: asr.language ?? cfg.language, model: cfg.asr_model, engine: cfg.asr_engine,\n  text, word_count, segment_count: segments.length, audio_seconds,\n  mean_no_speech_prob: no_speech, mean_avg_logprob: logprob, repetition,\n  usable: reasons.length === 0, quality_reasons: reasons, segments,\n} }];"
+      },
+      "id": "98a22880-5a37-59a0-a5ff-c171e460b56d",
+      "name": "Normalize transcript",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1300,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "de742250-010c-5c0b-9114-81c7c7a62e90",
+              "leftValue": "={{ $json.usable }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "bfa16c40-38d8-5419-929c-64d8d92e8cb3",
+      "name": "Usable transcript?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1560,
+        0
+      ],
+      "notes": "Whisper hallucinates fluent sentences over silence and noise; word count, the model's own no_speech_prob / avg_logprob and verbatim segment repetition are the gate before anything reaches the LLM.",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "ec5e7bf5-f833-51d9-9154-cebb400bbddb",
+              "name": "text",
+              "value": "={{ $json.text }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "44e23e76-9fa7-5426-8f4b-1036aa0500af",
+      "name": "Transcript for the model",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1820,
+        0
+      ],
+      "notes": "The Summarization Chain feeds the whole item JSON to the model - so hand it the text only, not the segments.",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "operationMode": "nodeInputJson",
+        "chunkingMode": "simple",
+        "chunkSize": 3000,
+        "chunkOverlap": 200,
+        "options": {
+          "summarizationMethodAndPrompts": {
+            "values": {
+              "summarizationMethod": "map_reduce",
+              "prompt": "You are writing the recap of a team meeting for a colleague who missed it. Using only the partial summaries below, write 3 to 6 short bullet points, one line each, starting with \"- \": what was discussed, what was decided, what is blocked. No preamble, no closing sentence, no invented facts.\n\n\"{text}\"\n\nMEETING SUMMARY:",
+              "combineMapPrompt": "Below is part of the transcript of a team meeting. Write 2-4 short factual sentences covering what was said in it. Keep every name, date, number and commitment exactly as spoken. Do not invent anything.\n\n\"{text}\"\n\nPARTIAL SUMMARY:"
+            }
+          }
+        }
+      },
+      "id": "b25f64d0-2ea3-50fc-ae5d-6d2f34bd3d4d",
+      "name": "Summarize meeting",
+      "type": "@n8n/n8n-nodes-langchain.chainSummarization",
+      "typeVersion": 2,
+      "position": [
+        2080,
+        0
+      ],
+      "notes": "map-reduce: a two-hour transcript never fits a 3B context window, so chunk -> summarise each chunk -> combine. One chunk here, same code path.",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "model": "llama3.2:3b",
+        "options": {
+          "temperature": 0.2
+        }
+      },
+      "id": "88b064dc-b2d9-59fb-bcb8-fb47eae6fbaa",
+      "name": "Ollama (summary)",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOllama",
+      "typeVersion": 1,
+      "position": [
+        2040,
+        220
+      ],
+      "credentials": {
+        "ollamaApi": {
+          "id": "ALcredOllamaLocl",
+          "name": "Ollama - local"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Summarization Chain output key has moved between versions ({response:{text}} / {text} / {output_text}), so\n// take the first string we recognise instead of trusting one shape.\nconst src = $input.first().json ?? {};\nconst pick = (v) => (typeof v === 'string' ? v : (v && typeof v === 'object' && typeof v.text === 'string' ? v.text : null));\nconst summary = (pick(src.response) ?? pick(src.text) ?? pick(src.output_text) ?? pick(src.output) ?? '').trim();\nif (!summary) {\n  throw new Error('A03: the summarization chain returned no text (keys: ' + Object.keys(src).join(', ') + ')');\n}\nconst rec = $('Normalize transcript').first().json;\n// One prompt for the extractor: the summary gives it the shape of the meeting, the transcript keeps it honest.\nconst extract_input = [\n  `Meeting: ${rec.meeting_title} on ${rec.meeting_date}.`,\n  'Extract every action item somebody committed to, and every decision that was made.',\n  'Give every action item a short imperative title and the name of the person who took it on.',\n  'Copy \"due\" exactly as it was spoken (today, tomorrow morning, by Friday, before the end of the week);',\n  'leave the field out when no deadline was mentioned. Never invent a date.',\n  '',\n  'SUMMARY:', summary,\n  '',\n  'TRANSCRIPT:', rec.text,\n].join('\\n');\nreturn [{ json: { summary, summary_lines: summary.split('\\n').map((l) => l.trim()).filter(Boolean),\n                  extract_input } }];"
+      },
+      "id": "56da98e7-d0d5-572c-a54d-fafe2e63e7ff",
+      "name": "Collect summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2340,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "text": "={{ $json.extract_input }}",
+        "schemaType": "fromJson",
+        "jsonSchemaExample": "{\n  \"tasks\": [\n    {\n      \"title\": \"Send the revised quote to the customer\",\n      \"owner\": \"Dana\",\n      \"due\": \"Friday\",\n      \"priority\": \"high\"\n    }\n  ],\n  \"decisions\": [\n    \"Ship the pricing change behind a feature flag\"\n  ]\n}",
+        "options": {}
+      },
+      "id": "6536bb91-76fb-55e3-84da-b22f81701881",
+      "name": "Extract action items",
+      "type": "@n8n/n8n-nodes-langchain.informationExtractor",
+      "typeVersion": 1,
+      "position": [
+        2600,
+        0
+      ],
+      "notes": "Structured output against a JSON schema. A 3B model does fail this sometimes - continue on error, so the run still stores the transcript and summary and is logged as `warning`.",
+      "notesInFlow": true,
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 3000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "model": "llama3.2:3b",
+        "options": {
+          "temperature": 0
+        }
+      },
+      "id": "d3c4c9bf-ec68-5fe8-a208-d7c5e4f006a0",
+      "name": "Ollama (extraction)",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOllama",
+      "typeVersion": 1,
+      "position": [
+        2560,
+        220
+      ],
+      "credentials": {
+        "ollamaApi": {
+          "id": "ALcredOllamaLocl",
+          "name": "Ollama - local"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Information Extractor -> {output: {tasks, decisions}}; with onError=continueRegularOutput a failed extraction\n// arrives as {error: {...}} instead, and the run degrades to \"transcript + summary, no tasks\" (status warning).\nconst rec = $('Normalize transcript').first().json;\nconst cfg = $('Config').first().json;\nconst sum = $('Collect summary').first().json;\nconst src = $input.first().json ?? {};\nconst out = src.output && typeof src.output === 'object' ? src.output : null;\nconst extraction_ok = !!out && Array.isArray(out.tasks);\nconst extraction_error = extraction_ok ? null : String(src.error?.message ?? src.error ?? 'no structured output').slice(0, 300);\n\nconst WEEKDAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];\nconst DAY = 86400000;\n// Due dates are resolved here, not by the model: a 3B model cannot do calendar arithmetic reliably, and a wrong\n// date in a task list is worse than no date. Anything we cannot resolve stays as `due_raw`.\nfunction resolveDue(raw, baseDate) {\n  if (raw === null || raw === undefined) return null;\n  const s = String(raw).trim().toLowerCase();\n  if (!s || ['none', 'n/a', 'na', 'tbd', 'unspecified', 'unknown', 'null'].includes(s)) return null;\n  const iso = s.match(/\\d{4}-\\d{2}-\\d{2}/);\n  if (iso) return iso[0];\n  const base = new Date(`${baseDate}T00:00:00Z`);\n  if (Number.isNaN(base.getTime())) return null;\n  const add = (d) => new Date(base.getTime() + d * DAY).toISOString().slice(0, 10);\n  if (/\\btoday\\b/.test(s)) return add(0);\n  if (/\\btomorrow\\b/.test(s)) return add(1);\n  const inN = s.match(/\\bin (\\d{1,2}) (day|week)s?\\b/);\n  if (inN) return add(Number(inN[1]) * (inN[2] === 'week' ? 7 : 1));\n  const wd = WEEKDAYS.findIndex((w) => new RegExp(`\\\\b${w}\\\\b`).test(s));\n  if (wd >= 0) {\n    let delta = (wd - base.getUTCDay() + 7) % 7;\n    if (delta === 0) delta = 7;                       // \"Friday\" said on a Friday means the next one\n    if (/\\bnext\\b/.test(s)) delta += 7;\n    return add(delta);\n  }\n  if (/\\bend of (the )?week\\b/.test(s)) return add(((5 - base.getUTCDay() + 7) % 7) || 7);\n  if (/\\bnext week\\b/.test(s)) return add(7);\n  return null;\n}\n\nconst PRIORITIES = ['low', 'medium', 'high'];\nconst seen = new Set();\nconst tasks = [];\nfor (const t of (extraction_ok ? out.tasks : [])) {\n  if (!t || typeof t !== 'object') continue;\n  const title = String(t.title ?? t.task ?? '').replace(/\\s+/g, ' ').trim().slice(0, 200);\n  if (!title || title.length < 4) continue;\n  const key = title.toLowerCase();\n  if (seen.has(key)) continue;                        // the same commitment is often restated in a meeting\n  seen.add(key);\n  const ownerRaw = String(t.owner ?? '').replace(/\\s+/g, ' ').trim();\n  const owner = ownerRaw && !/^(none|n\\/a|na|unassigned|unknown|team)$/i.test(ownerRaw) ? ownerRaw.slice(0, 80) : null;\n  const dueRaw = t.due ?? t.due_date ?? null;\n  const priority = PRIORITIES.includes(String(t.priority ?? '').toLowerCase()) ? String(t.priority).toLowerCase() : 'medium';\n  tasks.push({ title, owner, due_date: resolveDue(dueRaw, rec.meeting_date), due_raw: dueRaw ? String(dueRaw).slice(0, 80) : null,\n               priority, source: rec.source });\n  if (tasks.length >= Number(cfg.max_tasks)) break;\n}\nconst decisions = (extraction_ok && Array.isArray(out.decisions) ? out.decisions : [])\n  .map((d) => String(d ?? '').replace(/\\s+/g, ' ').trim()).filter((d) => d.length > 3).slice(0, 20);\n\nconst status = extraction_ok ? 'ok' : 'extraction_failed';\nconst meta = {\n  run_id: rec.run_id, source: rec.source, status,\n  meeting: { title: rec.meeting_title, date: rec.meeting_date },\n  audio: { file: rec.audio_file, file_name: rec.file_name, seconds: rec.audio_seconds, language: rec.language },\n  asr: { engine: rec.engine, model: rec.model, word_count: rec.word_count, segment_count: rec.segment_count,\n         mean_no_speech_prob: rec.mean_no_speech_prob, mean_avg_logprob: rec.mean_avg_logprob,\n         repetition: rec.repetition },\n  quality: { usable: true, reasons: [] },\n  transcript: rec.text, segments: rec.segments,\n  summary: sum.summary, summary_lines: sum.summary_lines,\n  decisions, tasks, task_count: tasks.length,\n  extraction_ok, extraction_error,\n  started_at: rec.started_at, finished_at: new Date().toISOString(),\n};\nreturn [{ json: { status, file_name: rec.file_name, storage_key: rec.audio_file, meta,\n                  task_count: tasks.length, transcribed_words: rec.word_count } }];"
+      },
+      "id": "779135b2-6de9-567a-a84f-b2b90dfe4fa7",
+      "name": "Build task list",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2860,
+        0
+      ],
+      "notes": "Cleans the model's output into rows: titles trimmed and deduped, owner normalised, due dates resolved against the meeting date in code (never by the model).",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Same output contract as \"Build task list\", so both lanes feed the same persistence chain. Nothing is sent to\n// the LLM: summarising a transcript the ASR itself is not confident about only produces confident nonsense.\nconst rec = $input.first().json;\nconst meta = {\n  run_id: rec.run_id, source: rec.source, status: 'low_confidence',\n  meeting: { title: rec.meeting_title, date: rec.meeting_date },\n  audio: { file: rec.audio_file, file_name: rec.file_name, seconds: rec.audio_seconds, language: rec.language },\n  asr: { engine: rec.engine, model: rec.model, word_count: rec.word_count, segment_count: rec.segment_count,\n         mean_no_speech_prob: rec.mean_no_speech_prob, mean_avg_logprob: rec.mean_avg_logprob,\n         repetition: rec.repetition },\n  quality: { usable: false, reasons: rec.quality_reasons },\n  transcript: rec.text, segments: rec.segments,\n  summary: '', summary_lines: [], decisions: [], tasks: [], task_count: 0,\n  extraction_ok: false, extraction_error: null,\n  started_at: rec.started_at, finished_at: new Date().toISOString(),\n};\nreturn [{ json: { status: 'low_confidence', file_name: rec.file_name, storage_key: rec.audio_file, meta,\n                  task_count: 0, transcribed_words: rec.word_count } }];"
+      },
+      "id": "bef7f0b6-9891-564f-8467-1bfad1cf6fa3",
+      "name": "No usable speech (skip AI)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        440
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "schema": {
+          "__rl": true,
+          "value": "public",
+          "mode": "list"
+        },
+        "table": {
+          "__rl": true,
+          "value": "documents",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "kind": "meeting-transcript",
+            "file_name": "={{ $json.file_name }}",
+            "storage_key": "={{ $json.storage_key }}",
+            "meta": "={{ JSON.stringify($json.meta) }}"
+          },
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "outputColumns": [
+            "*"
+          ]
+        }
+      },
+      "id": "4eccd7fd-8e47-5d5f-ab10-6ba036b14f8e",
+      "name": "Record transcript (documents)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        3120,
+        0
+      ],
+      "notes": "One row per recording; meta carries the whole record (transcript, segments, summary, decisions, tasks, ASR confidence), so everything downstream reads the row instead of six earlier nodes.",
+      "notesInFlow": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "postgres": {
+          "id": "ALcredPostgresDm",
+          "name": "Postgres - demo"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "with cleared as (\n  delete from tasks where source = $1 returning 1\n), incoming as (\n  select * from json_populate_recordset(null::tasks, $2::json)\n)\ninsert into tasks (source, title, owner, due_date)\nselect $1, title, owner, due_date from incoming\nreturning id, source, title, owner, due_date",
+        "options": {
+          "queryReplacement": "={{ [ $json.meta.source, JSON.stringify($json.meta.tasks) ] }}"
+        }
+      },
+      "id": "a363b595-1cca-5515-886b-03e1d7058f4d",
+      "name": "Replace task list (tasks)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        3380,
+        0
+      ],
+      "notes": "Idempotent replay: one statement deletes this source's previous tasks and inserts the current list. alwaysOutputData so an empty task list still continues.",
+      "notesInFlow": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "ALcredPostgresDm",
+          "name": "Postgres - demo"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// $json here is whatever the tasks statement returned (rows, or {} when there were none) - read the record from\n// the documents row instead, and count the inserted task ids from this node's input.\nconst doc = $('Record transcript (documents)').first().json;\nconst meta = typeof doc.meta === 'string' ? JSON.parse(doc.meta) : doc.meta;\nconst inserted = $input.all().map((i) => i.json).filter((r) => r && r.id);\nconst cfg = $('Config').first().json;\n\nconst line = (t) => `- [ ] ${t.title}` +\n  (t.owner ? ` - **${t.owner}**` : '') +\n  (t.due_date ? ` - due ${t.due_date}` : (t.due_raw ? ` - due ${t.due_raw} (not resolved)` : '')) +\n  (t.priority && t.priority !== 'medium' ? ` (${t.priority})` : '');\nconst md = [\n  `# ${meta.meeting.title} - ${meta.meeting.date}`,\n  '',\n  `Source: \\`${meta.audio.file_name}\\` (${meta.audio.seconds}s, ${meta.audio.language}, ` +\n  `${meta.asr.engine}/${meta.asr.model}) - document #${doc.id} - run ${meta.run_id}`,\n  '',\n  '## Summary',\n  meta.summary || '_No summary: the transcript did not pass the quality gate ' +\n    `(${(meta.quality.reasons || []).join('; ')})._`,\n  '',\n  '## Decisions',\n  ...(meta.decisions.length ? meta.decisions.map((d) => `- ${d}`) : ['_none recorded_']),\n  '',\n  `## Action items (${meta.tasks.length})`,\n  ...(meta.tasks.length ? meta.tasks.map(line) : ['_none extracted_']),\n  '',\n  '## Transcript',\n  meta.transcript || '_empty_',\n  '',\n].join('\\n');\n\nconst status = meta.status === 'ok' ? 'success' : 'warning';\nconst notes = meta.status === 'ok'\n  ? `transcribed ${meta.asr.word_count} words in ${meta.audio.seconds}s of audio, ${meta.decisions.length} decision(s), ` +\n    `${inserted.length} task(s) written for source ${meta.source} (document #${doc.id})`\n  : meta.status === 'low_confidence'\n    ? `low-confidence transcript, summarisation skipped: ${(meta.quality.reasons || []).join('; ')} (document #${doc.id})`\n    : `summary stored but action-item extraction failed: ${meta.extraction_error} (document #${doc.id})`;\nconst file_name = `meeting-${meta.run_id}.md`;\nreturn [{\n  json: { document_id: doc.id, run_id: meta.run_id, source: meta.source, status: meta.status, log_status: status,\n          notes, file_name, out_dir: cfg.out_dir, summary: meta.summary, decisions: meta.decisions,\n          tasks: meta.tasks, tasks_inserted: inserted.length, task_ids: inserted.map((r) => r.id),\n          word_count: meta.asr.word_count, audio_seconds: meta.audio.seconds },\n  binary: { data: await this.helpers.prepareBinaryData(Buffer.from(md, 'utf8'), file_name, 'text/markdown') },\n}];"
+      },
+      "id": "7b63e9e7-9693-588b-a7d3-aa6ab28294fb",
+      "name": "Build meeting notes",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3640,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "={{ $('Config').first().json.out_dir }}/{{ $json.file_name }}",
+        "dataPropertyName": "data",
+        "options": {}
+      },
+      "id": "81f69981-7cd4-5bde-8b6e-97e0c931cf34",
+      "name": "Write meeting notes",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        3900,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "bc628315-5340-5f4c-81b8-73a066adbcef",
+              "name": "execution_id",
+              "value": "={{ $execution.id }}",
+              "type": "string"
+            },
+            {
+              "id": "1177dd61-c3fe-5136-b7aa-a3a657e4db4e",
+              "name": "workflow_id",
+              "value": "={{ $workflow.id }}",
+              "type": "string"
+            },
+            {
+              "id": "be80c33f-a96b-5b8a-8d89-963c4610e996",
+              "name": "workflow_name",
+              "value": "={{ $workflow.name }}",
+              "type": "string"
+            },
+            {
+              "id": "9c65b6f8-046e-5100-bc55-b76fd28164b6",
+              "name": "status",
+              "value": "={{ $('Build meeting notes').first().json.log_status }}",
+              "type": "string"
+            },
+            {
+              "id": "c44b1ba0-2199-5f06-a900-122e89462181",
+              "name": "started_at",
+              "value": "={{ $('Config').first().json.started_at }}",
+              "type": "string"
+            },
+            {
+              "id": "fabbbe4c-4c1f-5173-9d67-ed47a0423d2b",
+              "name": "notes",
+              "value": "={{ $('Build meeting notes').first().json.notes }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "5978edfa-46a8-5ff2-af8d-e0a9c205f783",
+      "name": "Log input",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        4160,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "ALP08Observabili",
+          "mode": "id",
+          "cachedResultName": "P08 - Log execution"
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "dd883462-4cd2-5cdf-854a-375756a5b3a3",
+      "name": "Log execution (P08)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1,
+      "position": [
+        4420,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## A03 - Audio -> transcript -> summary -> task list (100% local)\n**Whisper** (`whisper:9000`, faster_whisper `base`) transcribes the recording: multipart `POST /asr?output=json`, which answers *text/plain*, so the body is parsed in **Normalize transcript**.\n\n**Quality gate** first: word count, the model's own `no_speech_prob` / `avg_logprob`, and verbatim segment repetition. A transcript Whisper is not confident about skips the LLM entirely (status `low_confidence`) - summarising noise only produces confident nonsense.\n\n**Ollama** (`llama3.2:3b`) then does two jobs: a map-reduce **summary** (chunked, so a long meeting still fits) and an **Information Extractor** that returns `{tasks, decisions}` against a JSON schema. Due dates are resolved in code, not by the model.\n\nOutput: a `documents` row (`kind = meeting-transcript`, meta = the whole record), `tasks` rows replaced idempotently per source, `data/out/meeting-<run_id>.md`, and one **P08** `execution_log` row (`success` / `warning`). Failures go to **P01**.",
+        "height": 340,
+        "width": 780,
+        "color": 4
+      },
+      "id": "9c93c188-70e1-5445-a610-84b67d556cdd",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -40,
+        -420
+      ]
+    }
+  ],
+  "connections": {
+    "Ollama (summary)": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Summarize meeting",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ollama (extraction)": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Extract action items",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run once (manual / CLI)": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "Read audio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read audio": {
+      "main": [
+        [
+          {
+            "node": "Audio file found?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Audio file found?": {
+      "main": [
+        [
+          {
+            "node": "Transcribe (Whisper)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Missing recording",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Transcribe (Whisper)": {
+      "main": [
+        [
+          {
+            "node": "Normalize transcript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize transcript": {
+      "main": [
+        [
+          {
+            "node": "Usable transcript?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Usable transcript?": {
+      "main": [
+        [
+          {
+            "node": "Transcript for the model",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No usable speech (skip AI)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Transcript for the model": {
+      "main": [
+        [
+          {
+            "node": "Summarize meeting",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Summarize meeting": {
+      "main": [
+        [
+          {
+            "node": "Collect summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect summary": {
+      "main": [
+        [
+          {
+            "node": "Extract action items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract action items": {
+      "main": [
+        [
+          {
+            "node": "Build task list",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build task list": {
+      "main": [
+        [
+          {
+            "node": "Record transcript (documents)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "No usable speech (skip AI)": {
+      "main": [
+        [
+          {
+            "node": "Record transcript (documents)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record transcript (documents)": {
+      "main": [
+        [
+          {
+            "node": "Replace task list (tasks)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Replace task list (tasks)": {
+      "main": [
+        [
+          {
+            "node": "Build meeting notes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build meeting notes": {
+      "main": [
+        [
+          {
+            "node": "Write meeting notes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write meeting notes": {
+      "main": [
+        [
+          {
+            "node": "Log input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log input": {
+      "main": [
+        [
+          {
+            "node": "Log execution (P08)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Africa/Tripoli",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "ALP01ErrorHandle"
+  },
+  "pinData": {},
+  "versionId": "192c0457-b86d-5a60-a962-e8c21d3eccdc",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "description": "Local Whisper transcription of a meeting recording, a map-reduce summary and a structured action-item list from Ollama, stored as a documents row + tasks rows."
+  },
+  "id": "ALA03AudioToTask",
+  "tags": [
+    {
+      "name": "automation-lab"
+    },
+    {
+      "name": "AI"
+    }
+  ]
+}

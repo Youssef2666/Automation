@@ -174,3 +174,44 @@ Facts proven against the running stack on 2026-09-06. Add to this file whenever 
 - Probing the model directly is much faster than iterating through n8n:
   `POST http://localhost:11434/api/chat {model, format: "json", stream: false, options: {temperature: 0},
   messages: [{role: "system", ...}, {role: "user", ...}]}`.
+
+## Learned while shipping A03 (2026-09-07)
+
+- **Whisper ASR web service** (`onerahmet/openai-whisper-asr-webservice:v1.10.0`, `ASR_ENGINE=faster_whisper`),
+  read from the container's own `/app/app/webservice.py` + `utils.py` and confirmed with curl: `POST /asr`,
+  multipart field **`audio_file`**, query `encode|task|language|initial_prompt|vad_filter|word_timestamps|output`
+  (`output` default `txt`, use `json`). Every response is a `StreamingResponse` with **`content-type:
+  text/plain`** and `content-disposition: attachment` *even for `output=json`* -> set the HTTP node to
+  `responseFormat: text` (builder `response="text"`) and `JSON.parse($json.data)`. Body:
+  `{language, segments: [asdict(faster_whisper.Segment)], text}`; Segment = `id, seek, start, end, text, tokens,
+  avg_logprob, compression_ratio, no_speech_prob, words, temperature` (drop `tokens`, it is long and useless).
+  Response header `asr-engine` names the engine. 30 s of audio on `base`/int8/CPU = ~11 s.
+- **`seed/files/meeting-clip.wav` is now real TTS speech** (66 s, 16 kHz mono): `generate_seed.py` renders an
+  invented standup through a local offline engine, so it transcribes stably - three runs gave identical text,
+  162 words / 16 segments, mean `avg_logprob` -0.12, mean `no_speech_prob` 0.171, zero verbatim repeats. It used
+  to be formant tones, and Whisper hallucinated a different sentence every run (`This is what you want.`,
+  `I'm sorry.` x5, `So Oh`, `. . .`); a machine with no TTS engine still gets that tone fallback, and the
+  generator warns loudly on stderr when it does. Useful signals for a quality gate, all in the response: word
+  count, mean `no_speech_prob`, mean `avg_logprob` (real speech ~-0.1 to -0.3, the tone fallback -0.9 to -1.4)
+  and the share of segments whose text repeats verbatim (a decoding loop). Speaker names must be *spoken* in the
+  script - Whisper does not diarise, so "Nadia." at the head of a line is the only thing that attributes it.
+- **Read/Write File (read) is a glob**: a path matching nothing returns **zero items**, every later node is
+  skipped and the execution ends *green* having done nothing (no P08 row either). `alwaysOutputData` on the read
+  node plus an If on `={{ $binary?.data?.fileName }}` -> Stop and Error turns that silence into a real failure.
+- Output shapes, measured: **Summarization Chain v2** -> `{response: {text: "..."}}`; **Information Extractor v1**
+  -> `{output: {...}}`. Summarization Chain v2 `operationMode: nodeInputJson` uses `JSON.stringify(item.json)` as
+  the document, so feed it a Set node with only the text field. Its custom prompts
+  (`options.summarizationMethodAndPrompts.values.combineMapPrompt` / `.prompt`) are LangChain templates and must
+  contain `{text}`.
+- Information Extractor is prompt-sensitive in a boring way: "owner and due date only when they were actually
+  said" produced **no** `due` values at all from `llama3.2:3b`; "copy `due` exactly as it was spoken (today,
+  tomorrow morning, by Friday...)" produced them for every task. Resolve the dates in a Code node afterwards -
+  a 3B model cannot do calendar arithmetic, and it also mis-attributes owners in multi-speaker text.
+- Idempotent "replace this source's rows" in one Postgres statement, no unique index needed:
+  `with cleared as (delete from tasks where source = $1 returning 1), incoming as (select * from
+  json_populate_recordset(null::tasks, $2::json)) insert into tasks (...) select $1, ... from incoming returning
+  ...`. `json_populate_recordset` casts ISO strings to `date` and ignores JSON keys the table does not have.
+  Pair with `.always_output()` so an empty array still lets the flow continue.
+- `n8n execute --id` also refuses `N8N_RUNNERS_BROKER_PORT=5680` when another agent's CLI run holds it; any free
+  port works (`5684`). Deleting a workflow through `DELETE /api/v1/workflows/<id>` deletes its executions too, so
+  capture what a throwaway probe printed *before* removing it.

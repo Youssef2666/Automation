@@ -1,0 +1,32 @@
+Weekly ops standup - synthetic transcript, 2026-09-07
+(Invented people, invented company. Used to exercise the summary + action-item legs without audio.)
+
+Nadia: Morning everyone, quick one. Orders queue first. We ended last week with about forty pending orders,
+most of them from the Thursday import. Karim, where are we?
+
+Karim: Twelve are still stuck. They all came from the same partner file and the postcode column was shifted by
+one. I can re-run the import once the partner sends the corrected file. I will chase them today and re-run
+tomorrow morning.
+
+Nadia: Good. Second thing, the invoice PDFs. Support keeps getting the same question about the VAT line.
+
+Samir: That is on me. The template puts VAT after the total. I will fix the template and regenerate this
+month's invoices by Friday.
+
+Nadia: Fine. Anything blocked?
+
+Samir: Yes, I need the new tax rates from finance before I regenerate anything. I mailed
+finance-ops@lab.local on Wednesday and got nothing back.
+
+Nadia: I will escalate that today. Third, the uptime alerts. We agreed last time to stop paging on the staging
+environment, and it is still paging.
+
+Karim: The rule is there, it just never got deployed. Ten minute job.
+
+Nadia: Then do it before the end of the week please. Decision from my side: we are not adding the new partner
+integration this sprint, it moves to the next one. Leila, anything from your side?
+
+Leila: Only that the customer export is now running nightly instead of hourly, as decided last week. No issues
+since. I will send the confirmation note to ops@lab.local once we have a full week of clean runs.
+
+Nadia: Great. Same time next week.

@@ -1028,9 +1028,18 @@ def qa_chain(wf: Workflow, name: str, query: str = "={{ $json.chatInput }}", sys
     return wf.add(name, "@n8n/n8n-nodes-langchain.chainRetrievalQa", 1.4, params)
 
 
-def summarize_chain(wf: Workflow, name: str = "Summarize", prompt: str | None = None) -> Node:
-    params: dict[str, Any] = {"options": {}}
+def summarize_chain(wf: Workflow, name: str = "Summarize", prompt: str | None = None,
+                    combine_prompt: str | None = None, method: str = "map_reduce", chunk_size: int = 1000,
+                    chunk_overlap: int = 200, mode: str = "nodeInputJson") -> Node:
+    """Summarization Chain v2. `mode`: nodeInputJson (pageContent = JSON.stringify(item.json)) | nodeInputBinary.
+
+    `prompt` is the per-chunk (map) prompt, `combine_prompt` the final one; both are LangChain templates and
+    MUST contain the `{text}` placeholder. Chunking happens inside the node (simple splitter).
+    """
+    params: dict[str, Any] = {"operationMode": mode, "chunkingMode": "simple", "chunkSize": chunk_size,
+                              "chunkOverlap": chunk_overlap, "options": {}}
     if prompt:
         params["options"]["summarizationMethodAndPrompts"] = {
-            "values": {"summarizationMethod": "map_reduce", "prompt": prompt, "combineMapPrompt": prompt}}
+            "values": {"summarizationMethod": method, "prompt": combine_prompt or prompt,
+                       "combineMapPrompt": prompt}}
     return wf.add(name, "@n8n/n8n-nodes-langchain.chainSummarization", 2, params)

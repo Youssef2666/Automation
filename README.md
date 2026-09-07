@@ -69,7 +69,7 @@ current screenshot and passes `scripts/validate.py` (see [CONTRIBUTING.md](CONTR
 
 Generated from each folder's README front-matter. Do not edit between the markers.
 
-<!-- STATS:START -->**22 of 36 workflows shipped · 8 of 8 patterns** (1 building)<!-- STATS:END -->
+<!-- STATS:START -->**23 of 36 workflows shipped · 8 of 8 patterns**<!-- STATS:END -->
 
 <!-- MATRIX:START -->
 ### Triggers (6/7 shipped)
@@ -113,13 +113,13 @@ Generated from each folder's README front-matter. Do not edit between the marker
 | R03 | [Data to Arabic RTL DOCX/PPTX Report](workflows/R03-arabic-rtl-report/) | Advanced | [P01](patterns/P01-error-handler/) | core, docs | ✅ shipped |
 | R04 | [PDF to Structured Fields to Dataset](workflows/R04-pdf-to-dataset/) | Advanced | [P01](patterns/P01-error-handler/) | core, docs | ✅ shipped |
 
-### AI (1/6 shipped)
+### AI (2/6 shipped)
 
 | ID | Workflow | Difficulty | Patterns | Services | Status |
 |---|---|---|---|---|---|
-| A01 | RAG Chatbot over Repo Docs | Advanced | - | - | 📋 planned |
+| A01 | [RAG Chatbot over Repo Docs](workflows/A01-rag-docs-chatbot/) | Advanced | - | - | 📋 planned |
 | A02 | [Ticket Classification and Routing](workflows/A02-ticket-classifier/) | Advanced | [P01](patterns/P01-error-handler/), [P08](patterns/P08-observability/) | core, ai | ✅ shipped |
-| A03 | [Audio to Transcript, Summary and Task List](workflows/A03-audio-to-tasks/) | Advanced | [P01](patterns/P01-error-handler/), [P08](patterns/P08-observability/) | core, ai | 🚧 building |
+| A03 | [Audio to Transcript, Summary and Task List](workflows/A03-audio-to-tasks/) | Advanced | [P01](patterns/P01-error-handler/), [P08](patterns/P08-observability/) | core, ai | ✅ shipped |
 | A04 | Arabic OCR to Structured Data | Advanced | - | - | 📋 planned |
 | A05 | Agent with Tools Calling Sub-workflows | Advanced | - | - | 📋 planned |
 | A06 | Long Article to Social Variants | Intermediate | - | - | 📋 planned |

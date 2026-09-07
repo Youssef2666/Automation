@@ -137,6 +137,7 @@ filled from the n8n API and charted in Metabase.
 - `M04 - DB Threshold Alert` (`info` when all within thresholds, `warning` on a breach, alerted or suppressed)
 - `D05 - Scheduled DB Dump to MinIO with Rotation` (one `success` row per dump; the run notes carry the tables, rows and rotation counts)
 - `A02 - Ticket Classification and Routing` (one row per triage run; `info` on an empty queue, `warning` when any ticket lands on the review lane)
+- `A03 - Audio to Transcript, Summary and Task List` (`success` with the task count, `warning` when the transcript fails the quality gate)
 - `P01 - Global Error Handler` (writes the `error` rows to the same table directly, same vocabulary)
 - `T02 - Scheduled Daily Digest` (planned: log `success` / `info` after *Record notification*)
 - `M01 - Uptime Monitor with Escalation` (planned: `warning` on state changes; M01 ships without the call today)
